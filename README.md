@@ -85,8 +85,8 @@ npm install
 
 # 只启动基础设施
 # 注意：docker-compose.yml 将服务映射到非标准端口，.env.example 已按此预设
-mysql:13306  redis:16379  minio:19000
-docker compose up mysql redis minio -d
+mysql:13306  redis:16379
+docker compose up mysql redis -d
 
 # 初始化数据库表结构（首次必须执行，跳过会导致启动后报错）
 npx prisma db push

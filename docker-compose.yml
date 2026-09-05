@@ -39,27 +39,6 @@ services:
       retries: 30
       start_period: 5s
 
-  # ==================== MinIO ====================
-  minio:
-    image: minio/minio:RELEASE.2025-02-28T09-55-16Z
-    container_name: waoowaoo-minio
-    restart: unless-stopped
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-    command: server /data --console-address ":9001"
-    ports:
-      - "19000:9000"
-      - "19001:9001"
-    volumes:
-      - minio_data:/data
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://127.0.0.1:9000/minio/health/live"]
-      interval: 5s
-      timeout: 5s
-      retries: 30
-      start_period: 10s
-
   # ==================== App (Next.js + Workers) ====================
   app:
     image: ghcr.io/saturndec/waoowaoo:latest
@@ -74,14 +53,15 @@ services:
       REDIS_USERNAME: ""
       REDIS_PASSWORD: ""
       REDIS_TLS: ""
-      # 存储：默认 MinIO（S3 兼容）
-      STORAGE_TYPE: minio
-      MINIO_ENDPOINT: "http://minio:9000"
-      MINIO_REGION: "us-east-1"
-      MINIO_BUCKET: "waoowaoo"
-      MINIO_ACCESS_KEY: "minioadmin"
-      MINIO_SECRET_KEY: "minioadmin"
-      MINIO_FORCE_PATH_STYLE: "true"
+      # 存储：火山引擎 TOS（变量值从同目录 .env 读取）
+      STORAGE_TYPE: tos
+      TOS_BUCKET: ${TOS_BUCKET:-}
+      TOS_ACCESS_KEY_ID: ${TOS_ACCESS_KEY_ID:-}
+      TOS_SECRET_ACCESS_KEY: ${TOS_SECRET_ACCESS_KEY:-}
+      TOS_REGION: ${TOS_REGION:-cn-beijing}
+      TOS_ENDPOINT: ${TOS_ENDPOINT:-tos-cn-beijing.volces.com}
+      TOS_PUBLIC_BASE_URL: ${TOS_PUBLIC_BASE_URL:-}
+      TOS_MEDIA_PREFIX: ${TOS_MEDIA_PREFIX:-media_gen}
       # 外部访问地址（浏览器实际访问）
       NEXTAUTH_URL: "http://localhost:13000"
       # 容器内自调用地址（服务端 fetch 自己的 API / 文件）
@@ -127,8 +107,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      minio:
-        condition: service_healthy
     command: >
       sh -c "
         npx prisma db push --skip-generate &&
@@ -149,4 +127,3 @@ services:
 volumes:
   mysql_data:
   redis_data:
-  minio_data:

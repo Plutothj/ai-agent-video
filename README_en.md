@@ -81,7 +81,7 @@ cp .env.example .env
 npm install
 
 # Start infrastructure only
-docker compose up mysql redis minio -d
+docker compose up mysql redis -d
 
 # Run database migration
 npx prisma db push
