@@ -1136,5 +1136,371 @@
         "supportGenerateAudio": false
       }
     }
+  },
+  {
+    "modelType": "video",
+    "provider": "tencent-vod",
+    "modelId": "kling-3.0",
+    "capabilities": {
+      "video": {
+        "generationModeOptions": [
+          "normal",
+          "firstlastframe"
+        ],
+        "durationOptions": [
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "resolutionOptions": [
+          "720p",
+          "1080p"
+        ],
+        "firstlastframe": true,
+        "supportGenerateAudio": true,
+        "generateAudioOptions": [
+          true,
+          false
+        ]
+      }
+    }
+  },
+  {
+    "modelType": "video",
+    "provider": "tencent-vod",
+    "modelId": "kling-3.0-omni",
+    "capabilities": {
+      "video": {
+        "generationModeOptions": [
+          "normal",
+          "firstlastframe"
+        ],
+        "durationOptions": [
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "resolutionOptions": [
+          "720p",
+          "1080p"
+        ],
+        "firstlastframe": true,
+        "supportGenerateAudio": true,
+        "generateAudioOptions": [
+          true,
+          false
+        ]
+      }
+    }
+  },
+  {
+    "modelType": "video",
+    "provider": "tencent-vod",
+    "modelId": "vs-2.0",
+    "capabilities": {
+      "video": {
+        "generationModeOptions": [
+          "normal",
+          "firstlastframe"
+        ],
+        "durationOptions": [
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "resolutionOptions": [
+          "480p",
+          "720p",
+          "1080p"
+        ],
+        "firstlastframe": true,
+        "supportGenerateAudio": true,
+        "generateAudioOptions": [
+          true,
+          false
+        ]
+      }
+    }
+  },
+  {
+    "modelType": "video",
+    "provider": "tencent-vod",
+    "modelId": "vs-2.5",
+    "capabilities": {
+      "video": {
+        "generationModeOptions": [
+          "normal",
+          "firstlastframe"
+        ],
+        "durationOptions": [
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30
+        ],
+        "resolutionOptions": [
+          "480p",
+          "720p",
+          "1080p"
+        ],
+        "firstlastframe": true,
+        "supportGenerateAudio": true,
+        "generateAudioOptions": [
+          true,
+          false
+        ]
+      }
+    }
+  },
+  {
+    "modelType": "video",
+    "provider": "tencent-vod",
+    "modelId": "vs-2.0-mini",
+    "capabilities": {
+      "video": {
+        "generationModeOptions": [
+          "normal",
+          "firstlastframe"
+        ],
+        "durationOptions": [
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "resolutionOptions": [
+          "480p",
+          "720p",
+          "1080p"
+        ],
+        "firstlastframe": true,
+        "supportGenerateAudio": true,
+        "generateAudioOptions": [
+          true,
+          false
+        ]
+      }
+    }
+  },
+  {
+    "modelType": "video",
+    "provider": "tencent-vod",
+    "modelId": "hailuo-h3",
+    "capabilities": {
+      "video": {
+        "generationModeOptions": [
+          "normal",
+          "firstlastframe"
+        ],
+        "durationOptions": [
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "resolutionOptions": [
+          "2k",
+          "4k"
+        ],
+        "firstlastframe": true,
+        "supportGenerateAudio": true,
+        "generateAudioOptions": [
+          true,
+          false
+        ]
+      }
+    }
+  },
+  {
+    "modelType": "video",
+    "provider": "tencent-vod",
+    "modelId": "wan-3.0",
+    "capabilities": {
+      "video": {
+        "generationModeOptions": [
+          "normal",
+          "firstlastframe"
+        ],
+        "durationOptions": [
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30
+        ],
+        "resolutionOptions": [
+          "480p",
+          "720p"
+        ],
+        "firstlastframe": true,
+        "supportGenerateAudio": true,
+        "generateAudioOptions": [
+          true,
+          false
+        ]
+      }
+    }
+  },
+  {
+    "modelType": "image",
+    "provider": "tencent-vod",
+    "modelId": "gg-3.0",
+    "capabilities": {
+      "image": {
+        "resolutionOptions": [
+          "1K",
+          "2K",
+          "4K"
+        ]
+      }
+    }
+  },
+  {
+    "modelType": "image",
+    "provider": "tencent-vod",
+    "modelId": "gg-3.1",
+    "capabilities": {
+      "image": {
+        "resolutionOptions": [
+          "1K",
+          "2K",
+          "4K"
+        ]
+      }
+    }
+  },
+  {
+    "modelType": "image",
+    "provider": "tencent-vod",
+    "modelId": "gg-3.1-lite",
+    "capabilities": {
+      "image": {
+        "resolutionOptions": [
+          "1K",
+          "2K",
+          "4K"
+        ]
+      }
+    }
+  },
+  {
+    "modelType": "image",
+    "provider": "tencent-vod",
+    "modelId": "og-image2-medium",
+    "capabilities": {
+      "image": {
+        "resolutionOptions": [
+          "1K",
+          "2K",
+          "4K"
+        ]
+      }
+    }
+  },
+  {
+    "modelType": "image",
+    "provider": "tencent-vod",
+    "modelId": "og-image2-high",
+    "capabilities": {
+      "image": {
+        "resolutionOptions": [
+          "1K",
+          "2K",
+          "4K"
+        ]
+      }
+    }
   }
 ]

@@ -21,6 +21,7 @@ import { queryGeminiBatchStatus, querySeedanceVideoStatus, queryGoogleVideoStatu
 import { getProviderConfig, getUserModels } from './api-config'
 import { buildRenderedTemplateRequest, buildTemplateVariables, normalizeResponseJson, readJsonPath } from './openai-compat-template-runtime'
 import { composeModelKey } from './model-config-contract'
+import { callTencentVod, resolveTencentCloudCredentials } from './tencent-cloud/client'
 
 const OPENAI_COMPAT_PROVIDER_PREFIX = 'openai-compatible:'
 const PROVIDER_UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -48,7 +49,7 @@ function getErrorMessage(error: unknown): string {
  * 解析 externalId 获取 provider、type 和请求信息
  */
 export function parseExternalId(externalId: string): {
-    provider: 'FAL' | 'ARK' | 'GEMINI' | 'GOOGLE' | 'MINIMAX' | 'VIDU' | 'OPENAI' | 'OCOMPAT' | 'BAILIAN' | 'SILICONFLOW' | 'UNKNOWN'
+    provider: 'FAL' | 'ARK' | 'GEMINI' | 'GOOGLE' | 'MINIMAX' | 'VIDU' | 'OPENAI' | 'OCOMPAT' | 'BAILIAN' | 'SILICONFLOW' | 'TENCENT' | 'UNKNOWN'
     type: 'VIDEO' | 'IMAGE' | 'BATCH' | 'UNKNOWN'
     endpoint?: string
     requestId: string
@@ -210,9 +211,23 @@ export function parseExternalId(externalId: string): {
         }
     }
 
+    if (externalId.startsWith('TENCENT:')) {
+        const parts = externalId.split(':')
+        const type = parts[1]
+        const requestId = parts.slice(2).join(':')
+        if ((type !== 'VIDEO' && type !== 'IMAGE') || !requestId) {
+            throw new Error(`无效 TENCENT externalId: "${externalId}"，应为 TENCENT:TYPE:taskId`)
+        }
+        return {
+            provider: 'TENCENT',
+            type: type as 'VIDEO' | 'IMAGE',
+            requestId,
+        }
+    }
+
     throw new Error(
         `无法识别的 externalId 格式: "${externalId}". ` +
-        `支持的格式: FAL:TYPE:endpoint:requestId, ARK:TYPE:requestId, GEMINI:BATCH:batchName, GOOGLE:VIDEO:operationName, MINIMAX:TYPE:taskId, VIDU:TYPE:taskId, OPENAI:VIDEO:providerToken:videoId, OCOMPAT:TYPE:providerToken:modelKeyToken:taskId, BAILIAN:TYPE:requestId, SILICONFLOW:TYPE:requestId`
+        `支持的格式: FAL:TYPE:endpoint:requestId, ARK:TYPE:requestId, GEMINI:BATCH:batchName, GOOGLE:VIDEO:operationName, MINIMAX:TYPE:taskId, VIDU:TYPE:taskId, OPENAI:VIDEO:providerToken:videoId, OCOMPAT:TYPE:providerToken:modelKeyToken:taskId, BAILIAN:TYPE:requestId, SILICONFLOW:TYPE:requestId, TENCENT:TYPE:taskId`
     )
 }
 
@@ -252,6 +267,8 @@ export async function pollAsyncTask(
             return await pollBailianTask(parsed.requestId, userId)
         case 'SILICONFLOW':
             return await pollSiliconFlowTask(parsed.requestId)
+        case 'TENCENT':
+            return await pollTencentTask(parsed.type, parsed.requestId, userId)
         default:
             // 🔥 移除 fallback：未知 provider 直接抛出错误
             throw new Error(`未知的 Provider: ${parsed.provider}`)
@@ -859,6 +876,146 @@ async function pollSiliconFlowTask(requestId: string): Promise<PollResult> {
     }
 }
 
+// ==================== 腾讯云 VOD AIGC 轮询 ====================
+
+interface TencentVodFileInfo {
+    FileUrl?: string
+    UsageType?: string
+    FileId?: string
+    FileType?: string
+}
+
+interface TencentVodAigcTaskDetail {
+    TaskId?: string
+    Status?: string
+    ErrCode?: number | string
+    ErrCodeExt?: string
+    Message?: string
+    Progress?: number
+    Output?: {
+        FileInfos?: TencentVodFileInfo[]
+    }
+}
+
+interface TencentVodTaskDetailResponse {
+    TaskType?: string
+    Status?: string
+    AigcVideoTask?: TencentVodAigcTaskDetail
+    AigcImageTask?: TencentVodAigcTaskDetail
+    AigcAudioTask?: TencentVodAigcTaskDetail
+    TextToSpeechAsyncTask?: TencentVodAigcTaskDetail
+    RequestId?: string
+}
+
+function readTencentErrCode(value: number | string | undefined): number | null {
+    if (typeof value === 'number') return value
+    if (typeof value === 'string' && value.trim() !== '') {
+        const parsed = Number.parseInt(value, 10)
+        return Number.isFinite(parsed) ? parsed : null
+    }
+    return null
+}
+
+function pickTencentTaskDetail(
+    response: TencentVodTaskDetailResponse,
+    type: 'VIDEO' | 'IMAGE',
+): TencentVodAigcTaskDetail | undefined {
+    const subTask = type === 'VIDEO' ? response.AigcVideoTask : response.AigcImageTask
+    if (subTask) return subTask
+    // 兼容顶层平铺结构（部分接口版本不嵌套子对象）
+    const flattened = response as TencentVodTaskDetailResponse & TencentVodAigcTaskDetail
+    if (flattened.Status && (flattened.Output || typeof flattened.ErrCode !== 'undefined')) {
+        return flattened
+    }
+    return undefined
+}
+
+function extractTencentMediaUrls(detail: TencentVodAigcTaskDetail): { mediaUrl?: string; coverUrl?: string } {
+    const fileInfos = detail.Output?.FileInfos || []
+    let mediaUrl: string | undefined
+    let coverUrl: string | undefined
+    for (const fileInfo of fileInfos) {
+        const url = typeof fileInfo.FileUrl === 'string' ? fileInfo.FileUrl.trim() : ''
+        if (!url) continue
+        if (fileInfo.UsageType === 'image_url') {
+            coverUrl = coverUrl || url
+        } else {
+            mediaUrl = mediaUrl || url
+        }
+    }
+    return { mediaUrl, coverUrl }
+}
+
+/**
+ * 腾讯云 VOD AIGC 任务轮询（DescribeTaskDetail，任务 3 天内可查）
+ */
+async function pollTencentTask(
+    type: 'VIDEO' | 'IMAGE' | 'BATCH' | 'UNKNOWN',
+    taskId: string,
+    userId: string,
+): Promise<PollResult> {
+    const logPrefix = '[Tencent VOD Query]'
+
+    try {
+        const { apiKey } = await getProviderConfig(userId, 'tencent-vod')
+        const credentials = resolveTencentCloudCredentials(apiKey)
+        const response = await callTencentVod({
+            action: 'DescribeTaskDetail',
+            payload: {
+                SubAppId: credentials.subAppId,
+                TaskId: taskId,
+            },
+            credentials,
+        }) as TencentVodTaskDetailResponse
+
+        const detail = pickTencentTaskDetail(response, type === 'IMAGE' ? 'IMAGE' : 'VIDEO')
+        if (!detail) {
+            return {
+                status: 'pending',
+            }
+        }
+
+        const status = (typeof detail.Status === 'string' ? detail.Status : '').trim().toUpperCase()
+        const errCode = readTencentErrCode(detail.ErrCode)
+
+        if (status === 'FINISH' && errCode === 0) {
+            const { mediaUrl, coverUrl } = extractTencentMediaUrls(detail)
+            if (!mediaUrl && !coverUrl) {
+                return {
+                    status: 'failed',
+                    error: 'TENCENT: 任务完成但未返回产物 URL',
+                }
+            }
+            const url = mediaUrl || coverUrl
+            return {
+                status: 'completed',
+                resultUrl: url,
+                ...(type === 'IMAGE' ? { imageUrl: url } : { videoUrl: url }),
+            }
+        }
+
+        if (status === 'ABORTED' || status === 'FAIL' || (status === 'FINISH' && errCode !== 0)) {
+            const message = detail.Message || detail.ErrCodeExt || `任务失败 (${status}, ErrCode=${String(detail.ErrCode)})`
+            _ulogError(`${logPrefix} TaskId=${taskId} 失败: ${message}`)
+            return {
+                status: 'failed',
+                error: `TENCENT: ${message}`,
+            }
+        }
+
+        return {
+            status: 'pending',
+        }
+    } catch (error: unknown) {
+        const errorMessage = getErrorMessage(error)
+        _ulogError(`${logPrefix} TaskId=${taskId} 异常:`, error)
+        return {
+            status: 'failed',
+            error: `TENCENT: ${errorMessage}`,
+        }
+    }
+}
+
 /**
  * 查询 Vidu 任务状态
  */
@@ -950,7 +1107,7 @@ async function queryViduTaskStatus(
  * 创建标准格式的 externalId
  */
 export function formatExternalId(
-    provider: 'FAL' | 'ARK' | 'GEMINI' | 'GOOGLE' | 'MINIMAX' | 'VIDU' | 'OPENAI' | 'OCOMPAT' | 'BAILIAN' | 'SILICONFLOW',
+    provider: 'FAL' | 'ARK' | 'GEMINI' | 'GOOGLE' | 'MINIMAX' | 'VIDU' | 'OPENAI' | 'OCOMPAT' | 'BAILIAN' | 'SILICONFLOW' | 'TENCENT',
     type: 'VIDEO' | 'IMAGE' | 'BATCH',
     requestId: string,
     endpoint?: string,

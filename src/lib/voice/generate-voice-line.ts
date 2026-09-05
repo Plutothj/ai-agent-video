@@ -6,6 +6,7 @@ import { normalizeToBase64ForGeneration } from '@/lib/media/outbound-image'
 import { extractStorageKey, getSignedUrl, toFetchableUrl, uploadObject } from '@/lib/storage'
 import { resolveStorageKeyFromMediaValue } from '@/lib/media/service'
 import { synthesizeWithBailianTTS } from '@/lib/providers/bailian'
+import { synthesizeWithTencentTTS } from '@/lib/providers/tencent-vod/tts'
 import {
   parseSpeakerVoiceMap,
   resolveVoiceBindingForProvider,
@@ -260,6 +261,29 @@ export async function generateVoiceLine(params: {
     generated = {
       audioData,
       audioDuration: result.audioDuration ?? getWavDurationFromBuffer(audioData),
+    }
+  } else if (providerKey === 'tencent-vod') {
+    if (!voiceBinding || voiceBinding.provider !== 'tencent-vod') {
+      const hasUploadedReference =
+        !!character?.customVoiceUrl ||
+        (speakerVoice?.provider === 'fal' && !!speakerVoice.audioUrl)
+      if (hasUploadedReference) {
+        throw new Error('腾讯云 TTS 不支持参考音频克隆，请为该发言人绑定 VoiceId 音色')
+      }
+      throw new Error('请先为该发言人绑定腾讯云 VoiceId 音色')
+    }
+    const { apiKey } = await getProviderConfig(params.userId, audioSelection.provider)
+    const result = await synthesizeWithTencentTTS({
+      text,
+      voiceId: voiceBinding.voiceId,
+    }, apiKey)
+    if (!result.success || !result.audioData) {
+      throw new Error(result.error || 'TENCENT_TTS_FAILED')
+    }
+    const audioData = result.audioData
+    generated = {
+      audioData,
+      audioDuration: result.audioDuration || getWavDurationFromBuffer(audioData),
     }
   } else {
     throw new Error(`AUDIO_PROVIDER_UNSUPPORTED: ${audioSelection.provider}`)

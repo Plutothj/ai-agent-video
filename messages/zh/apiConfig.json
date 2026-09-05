@@ -177,7 +177,10 @@
       "openai_compatible_step1": "填写任意 OpenAI 协议兼容服务的 Base URL 与 API Key",
       "gemini_compatible_step1": "填写任意 Gemini 协议兼容服务的 Base URL 与 API Key",
       "bailian_step1": "进入阿里云百炼平台，获取 API Key",
-      "siliconflow_step1": "进入硅基流动控制台，创建 API Key"
+      "siliconflow_step1": "进入硅基流动控制台，创建 API Key",
+      "tencent_tokenhub_step1": "进入腾讯云 TokenHub 控制台获取 API Key，Base URL 已预填（https://tokenhub.tencentmaas.com/v1）",
+      "tencent_vod_step1": "进入腾讯云「访问管理 → API 密钥管理」获取 SecretId / SecretKey，并准备点播 SubAppId",
+      "tencent_vod_step2": "在 API Key 输入框填入组合凭据：secretId:secretKey:subAppId（冒号分隔），也可改用环境变量 TENCENT_VOD_SECRET_ID / TENCENT_VOD_SECRET_KEY / TENCENT_VOD_SUB_APP_ID"
     }
   },
   "assistantOpen": "AI配置助手",

@@ -2,11 +2,12 @@ import { StorageConfigError } from '@/lib/storage/errors'
 import { LocalStorageProvider } from '@/lib/storage/providers/local'
 import { MinioStorageProvider } from '@/lib/storage/providers/minio'
 import { CosStorageProvider } from '@/lib/storage/providers/cos'
+import { TosStorageProvider } from '@/lib/storage/providers/tos'
 import type { StorageFactoryOptions, StorageProvider, StorageType } from '@/lib/storage/types'
 
 function normalizeStorageType(rawType: string | undefined): StorageType {
   const normalized = (rawType || 'minio').trim().toLowerCase()
-  if (normalized === 'minio' || normalized === 'local' || normalized === 'cos') {
+  if (normalized === 'minio' || normalized === 'local' || normalized === 'cos' || normalized === 'tos') {
     return normalized
   }
   throw new StorageConfigError(`Unsupported STORAGE_TYPE: ${rawType}`)
@@ -20,6 +21,9 @@ export function createStorageProvider(options: StorageFactoryOptions = {}): Stor
   }
   if (type === 'local') {
     return new LocalStorageProvider()
+  }
+  if (type === 'tos') {
+    return new TosStorageProvider()
   }
 
   return new CosStorageProvider()

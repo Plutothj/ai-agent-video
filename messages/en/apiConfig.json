@@ -177,7 +177,10 @@
       "openai_compatible_step1": "Enter any OpenAI-compatible service Base URL and API key",
       "gemini_compatible_step1": "Enter any Gemini-compatible service Base URL and API key",
       "bailian_step1": "Go to Alibaba Cloud Bailian console and get an API Key",
-      "siliconflow_step1": "Go to SiliconFlow console and create an API Key"
+      "siliconflow_step1": "Go to SiliconFlow console and create an API Key",
+      "tencent_tokenhub_step1": "Get an API Key from Tencent Cloud TokenHub console. Base URL is pre-filled (https://tokenhub.tencentmaas.com/v1)",
+      "tencent_vod_step1": "Get SecretId / SecretKey from Tencent Cloud CAM API Key console, and prepare your VOD SubAppId",
+      "tencent_vod_step2": "Enter combined credentials in the API Key field: secretId:secretKey:subAppId (colon separated), or use env vars TENCENT_VOD_SECRET_ID / TENCENT_VOD_SECRET_KEY / TENCENT_VOD_SUB_APP_ID instead"
     }
   },
   "assistantOpen": "AI Assistant",

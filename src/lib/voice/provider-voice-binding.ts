@@ -1,6 +1,6 @@
 type VoiceSource = 'character' | 'speaker'
 
-export type SupportedAudioProviderKey = 'fal' | 'bailian'
+export type SupportedAudioProviderKey = 'fal' | 'bailian' | 'tencent-vod'
 
 export interface CharacterVoiceFields {
   customVoiceUrl?: string | null
@@ -28,7 +28,14 @@ export type BailianSpeakerVoiceEntry = {
   previewAudioUrl?: string
 }
 
-export type SpeakerVoiceEntry = FalSpeakerVoiceEntry | BailianSpeakerVoiceEntry
+export type TencentVodSpeakerVoiceEntry = {
+  provider: 'tencent-vod'
+  voiceType: string
+  voiceId: string
+  previewAudioUrl?: string
+}
+
+export type SpeakerVoiceEntry = FalSpeakerVoiceEntry | BailianSpeakerVoiceEntry | TencentVodSpeakerVoiceEntry
 export type SpeakerVoiceMap = Record<string, SpeakerVoiceEntry>
 
 export type FalVoiceGenerationBinding = {
@@ -43,7 +50,13 @@ export type BailianVoiceGenerationBinding = {
   voiceId: string
 }
 
-export type VoiceGenerationBinding = FalVoiceGenerationBinding | BailianVoiceGenerationBinding
+export type TencentVodVoiceGenerationBinding = {
+  provider: 'tencent-vod'
+  source: VoiceSource
+  voiceId: string
+}
+
+export type VoiceGenerationBinding = FalVoiceGenerationBinding | BailianVoiceGenerationBinding | TencentVodVoiceGenerationBinding
 
 export type SpeakerVoicePatch =
   | {
@@ -53,6 +66,12 @@ export type SpeakerVoicePatch =
   }
   | {
     provider: 'bailian'
+    voiceType?: string
+    voiceId: string
+    previewAudioUrl?: string
+  }
+  | {
+    provider: 'tencent-vod'
     voiceType?: string
     voiceId: string
     previewAudioUrl?: string
@@ -94,6 +113,19 @@ function normalizeRawSpeakerVoiceEntry(raw: unknown, speaker: string): SpeakerVo
     const preview = previewAudioUrl || audioUrl
     return {
       provider: 'bailian',
+      voiceType,
+      voiceId,
+      ...(preview ? { previewAudioUrl: preview } : {}),
+    }
+  }
+
+  if (provider === 'tencent-vod') {
+    if (!voiceId) {
+      throw new Error(`SPEAKER_VOICE_ENTRY_INVALID_TENCENT_VOICE_ID: ${speaker}`)
+    }
+    const preview = previewAudioUrl || audioUrl
+    return {
+      provider: 'tencent-vod',
       voiceType,
       voiceId,
       ...(preview ? { previewAudioUrl: preview } : {}),
@@ -151,7 +183,7 @@ export function parseSpeakerVoiceMap(raw: string | null | undefined): SpeakerVoi
 }
 
 function normalizeProviderKey(providerKey: string): SupportedAudioProviderKey | null {
-  if (providerKey === 'fal' || providerKey === 'bailian') {
+  if (providerKey === 'fal' || providerKey === 'bailian' || providerKey === 'tencent-vod') {
     return providerKey
   }
   return null
@@ -175,6 +207,15 @@ function toBailianBinding(source: VoiceSource, voiceId: string | null): BailianV
   }
 }
 
+function toTencentVodBinding(source: VoiceSource, voiceId: string | null): TencentVodVoiceGenerationBinding | null {
+  if (!voiceId) return null
+  return {
+    provider: 'tencent-vod',
+    source,
+    voiceId,
+  }
+}
+
 export function resolveVoiceBindingForProvider(params: {
   providerKey: string
   character?: CharacterVoiceFields | null
@@ -191,6 +232,14 @@ export function resolveVoiceBindingForProvider(params: {
     if (fromCharacter) return fromCharacter
     if (params.speakerVoice?.provider !== 'fal') return null
     return toFalBinding('speaker', readTrimmedString(params.speakerVoice.audioUrl))
+  }
+
+  // bailian / tencent-vod 均为 voiceId 型绑定，但 provider 必须与请求的 providerKey 一致
+  if (providerKey === 'tencent-vod') {
+    const fromCharacter = toTencentVodBinding('character', characterVoiceId)
+    if (fromCharacter) return fromCharacter
+    if (params.speakerVoice?.provider !== 'tencent-vod') return null
+    return toTencentVodBinding('speaker', readTrimmedString(params.speakerVoice.voiceId))
   }
 
   const fromCharacter = toBailianBinding('character', characterVoiceId)

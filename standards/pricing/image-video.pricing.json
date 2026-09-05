@@ -6063,5 +6063,358 @@
       "mode": "flat",
       "flatAmount": 0.5
     }
+  },
+  {
+    "apiType": "voice",
+    "provider": "tencent-vod",
+    "modelId": "texttospeech",
+    "pricing": {
+      "mode": "flat",
+      "flatAmount": 0.05
+    }
+  },
+  {
+    "apiType": "video",
+    "provider": "tencent-vod",
+    "modelId": "kling-3.0",
+    "pricing": {
+      "mode": "capability",
+      "tiers": [
+        {
+          "when": {
+            "resolution": "720p",
+            "generateAudio": false
+          },
+          "amount": 0.42
+        },
+        {
+          "when": {
+            "resolution": "720p",
+            "generateAudio": true
+          },
+          "amount": 0.63
+        },
+        {
+          "when": {
+            "resolution": "1080p",
+            "generateAudio": false
+          },
+          "amount": 0.56
+        },
+        {
+          "when": {
+            "resolution": "1080p",
+            "generateAudio": true
+          },
+          "amount": 0.84
+        }
+      ]
+    }
+  },
+  {
+    "apiType": "video",
+    "provider": "tencent-vod",
+    "modelId": "kling-3.0-omni",
+    "pricing": {
+      "mode": "capability",
+      "tiers": [
+        {
+          "when": {
+            "resolution": "720p",
+            "generateAudio": false
+          },
+          "amount": 0.42
+        },
+        {
+          "when": {
+            "resolution": "720p",
+            "generateAudio": true
+          },
+          "amount": 0.56
+        },
+        {
+          "when": {
+            "resolution": "1080p",
+            "generateAudio": false
+          },
+          "amount": 0.56
+        },
+        {
+          "when": {
+            "resolution": "1080p",
+            "generateAudio": true
+          },
+          "amount": 0.7
+        }
+      ]
+    }
+  },
+  {
+    "apiType": "video",
+    "provider": "tencent-vod",
+    "modelId": "vs-2.0",
+    "pricing": {
+      "mode": "capability",
+      "tiers": [
+        {
+          "when": {
+            "resolution": "480p"
+          },
+          "amount": 0.46
+        },
+        {
+          "when": {
+            "resolution": "720p"
+          },
+          "amount": 1.0
+        },
+        {
+          "when": {
+            "resolution": "1080p"
+          },
+          "amount": 2.5
+        }
+      ]
+    }
+  },
+  {
+    "apiType": "video",
+    "provider": "tencent-vod",
+    "modelId": "vs-2.5",
+    "pricing": {
+      "mode": "capability",
+      "tiers": [
+        {
+          "when": {
+            "resolution": "480p"
+          },
+          "amount": 0.46
+        },
+        {
+          "when": {
+            "resolution": "720p"
+          },
+          "amount": 1.0
+        },
+        {
+          "when": {
+            "resolution": "1080p"
+          },
+          "amount": 2.5
+        }
+      ]
+    }
+  },
+  {
+    "apiType": "video",
+    "provider": "tencent-vod",
+    "modelId": "vs-2.0-mini",
+    "pricing": {
+      "mode": "capability",
+      "tiers": [
+        {
+          "when": {
+            "resolution": "480p"
+          },
+          "amount": 0.09
+        },
+        {
+          "when": {
+            "resolution": "720p"
+          },
+          "amount": 0.2
+        },
+        {
+          "when": {
+            "resolution": "1080p"
+          },
+          "amount": 0.3
+        }
+      ]
+    }
+  },
+  {
+    "apiType": "video",
+    "provider": "tencent-vod",
+    "modelId": "hailuo-h3",
+    "pricing": {
+      "mode": "capability",
+      "tiers": [
+        {
+          "when": {
+            "resolution": "2k"
+          },
+          "amount": 0.8
+        },
+        {
+          "when": {
+            "resolution": "4k"
+          },
+          "amount": 0.96
+        }
+      ]
+    }
+  },
+  {
+    "apiType": "video",
+    "provider": "tencent-vod",
+    "modelId": "wan-3.0",
+    "pricing": {
+      "mode": "capability",
+      "tiers": [
+        {
+          "when": {
+            "resolution": "480p"
+          },
+          "amount": 0.23
+        },
+        {
+          "when": {
+            "resolution": "720p"
+          },
+          "amount": 0.45
+        }
+      ]
+    }
+  },
+  {
+    "apiType": "image",
+    "provider": "tencent-vod",
+    "modelId": "gg-3.0",
+    "pricing": {
+      "mode": "capability",
+      "tiers": [
+        {
+          "when": {
+            "resolution": "1K"
+          },
+          "amount": 0.85
+        },
+        {
+          "when": {
+            "resolution": "2K"
+          },
+          "amount": 0.85
+        },
+        {
+          "when": {
+            "resolution": "4K"
+          },
+          "amount": 1.53
+        }
+      ]
+    }
+  },
+  {
+    "apiType": "image",
+    "provider": "tencent-vod",
+    "modelId": "gg-3.1",
+    "pricing": {
+      "mode": "capability",
+      "tiers": [
+        {
+          "when": {
+            "resolution": "1K"
+          },
+          "amount": 0.42
+        },
+        {
+          "when": {
+            "resolution": "2K"
+          },
+          "amount": 0.64
+        },
+        {
+          "when": {
+            "resolution": "4K"
+          },
+          "amount": 0.95
+        }
+      ]
+    }
+  },
+  {
+    "apiType": "image",
+    "provider": "tencent-vod",
+    "modelId": "gg-3.1-lite",
+    "pricing": {
+      "mode": "capability",
+      "tiers": [
+        {
+          "when": {
+            "resolution": "1K"
+          },
+          "amount": 0.21
+        },
+        {
+          "when": {
+            "resolution": "2K"
+          },
+          "amount": 0.26
+        },
+        {
+          "when": {
+            "resolution": "4K"
+          },
+          "amount": 0.31
+        }
+      ]
+    }
+  },
+  {
+    "apiType": "image",
+    "provider": "tencent-vod",
+    "modelId": "og-image2-medium",
+    "pricing": {
+      "mode": "capability",
+      "tiers": [
+        {
+          "when": {
+            "resolution": "1K"
+          },
+          "amount": 0.36
+        },
+        {
+          "when": {
+            "resolution": "2K"
+          },
+          "amount": 0.72
+        },
+        {
+          "when": {
+            "resolution": "4K"
+          },
+          "amount": 1.2
+        }
+      ]
+    }
+  },
+  {
+    "apiType": "image",
+    "provider": "tencent-vod",
+    "modelId": "og-image2-high",
+    "pricing": {
+      "mode": "capability",
+      "tiers": [
+        {
+          "when": {
+            "resolution": "1K"
+          },
+          "amount": 1.42
+        },
+        {
+          "when": {
+            "resolution": "2K"
+          },
+          "amount": 2.89
+        },
+        {
+          "when": {
+            "resolution": "4K"
+          },
+          "amount": 4.81
+        }
+      ]
+    }
   }
 ]

@@ -80,6 +80,12 @@ export function getSignedUrl(key: string, expiresInSeconds: number = DEFAULT_SIG
     return `/api/files/${encodeURIComponent(key)}`
   }
 
+  // TOS + 公开域名（CDN/自定义域）场景：直接返回公开 URL，避免逐请求 302
+  const publicUrl = provider.getDirectPublicUrl?.(key)
+  if (publicUrl) {
+    return publicUrl
+  }
+
   return `/api/storage/sign?key=${encodeURIComponent(key)}&expires=${encodeURIComponent(String(expiresInSeconds))}`
 }
 

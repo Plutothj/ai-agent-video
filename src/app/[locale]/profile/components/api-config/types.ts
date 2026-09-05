@@ -119,6 +119,11 @@ export const PRESET_MODELS: PresetModel[] = [
     { modelId: 'MiniMax-M2.1-highspeed', name: 'MiniMax M2.1 Highspeed', type: 'llm', provider: 'minimax' },
     { modelId: 'MiniMax-M2', name: 'MiniMax M2', type: 'llm', provider: 'minimax' },
 
+    // 腾讯云 TokenHub 文本模型（OpenAI 兼容网关）
+    { modelId: 'kimi-k2.6', name: 'Kimi K2.6', type: 'llm', provider: 'tencent-tokenhub' },
+    { modelId: 'deepseek-v4-pro-0813', name: 'DeepSeek V4 Pro', type: 'llm', provider: 'tencent-tokenhub' },
+    { modelId: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', type: 'llm', provider: 'tencent-tokenhub' },
+
     // 图像模型
     { modelId: 'banana', name: 'Banana Pro', type: 'image', provider: 'fal' },
     { modelId: 'banana-2', name: 'Banana 2', type: 'image', provider: 'fal' },
@@ -184,6 +189,21 @@ export const PRESET_MODELS: PresetModel[] = [
     { modelId: 'viduq1', name: 'Vidu Q1', type: 'video', provider: 'vidu' },
     { modelId: 'viduq1-classic', name: 'Vidu Q1 Classic', type: 'video', provider: 'vidu' },
     { modelId: 'vidu2.0', name: 'Vidu 2.0', type: 'video', provider: 'vidu' },
+
+    // 腾讯云 VOD AIGC 模型（与 drama 生产库 ai_model / ai_video_model 对齐；凭据见 provider 教程）
+    { modelId: 'kling-3.0', name: 'Kling 3.0', type: 'video', provider: 'tencent-vod' },
+    { modelId: 'kling-3.0-omni', name: 'Kling 3.0 Omni', type: 'video', provider: 'tencent-vod' },
+    { modelId: 'vs-2.0', name: 'VS 2.0', type: 'video', provider: 'tencent-vod' },
+    { modelId: 'vs-2.5', name: 'VS 2.5', type: 'video', provider: 'tencent-vod' },
+    { modelId: 'vs-2.0-mini', name: 'VS 2.0 Mini', type: 'video', provider: 'tencent-vod' },
+    { modelId: 'hailuo-h3', name: 'Hailuo H3', type: 'video', provider: 'tencent-vod' },
+    { modelId: 'wan-3.0', name: 'Wan 3.0', type: 'video', provider: 'tencent-vod' },
+    { modelId: 'gg-3.1', name: 'GG 3.1 图生图', type: 'image', provider: 'tencent-vod' },
+    { modelId: 'gg-3.1-lite', name: 'GG 3.1 Lite 图生图', type: 'image', provider: 'tencent-vod' },
+    { modelId: 'gg-3.0', name: 'GG 3.0 图生图', type: 'image', provider: 'tencent-vod' },
+    { modelId: 'og-image2-medium', name: 'OG image2_medium 文生图', type: 'image', provider: 'tencent-vod' },
+    { modelId: 'og-image2-high', name: 'OG image2_high 文生图', type: 'image', provider: 'tencent-vod' },
+    { modelId: 'texttospeech', name: '台词配音 TTS (腾讯云)', type: 'audio', provider: 'tencent-vod' },
 ]
 
 const PRESET_COMING_SOON_MODEL_KEYS = new Set<string>([])
@@ -205,6 +225,8 @@ export const PRESET_PROVIDERS: Omit<Provider, 'apiKey' | 'hasApiKey'>[] = [
     { id: 'minimax', name: 'MiniMax Hailuo', baseUrl: 'https://api.minimaxi.com/v1' },
     { id: 'vidu', name: 'Vidu' },
     { id: 'fal', name: 'FAL' },
+    { id: 'tencent-tokenhub', name: 'Tencent TokenHub', baseUrl: 'https://tokenhub.tencentmaas.com/v1' },
+    { id: 'tencent-vod', name: 'Tencent Cloud VOD' },
 ]
 
 const ZH_PROVIDER_NAME_MAP: Record<string, string> = {
@@ -213,6 +235,8 @@ const ZH_PROVIDER_NAME_MAP: Record<string, string> = {
     vidu: '生数科技 Vidu',
     bailian: '阿里云百炼',
     siliconflow: '硅基流动',
+    'tencent-tokenhub': '腾讯云 TokenHub',
+    'tencent-vod': '腾讯云点播 AIGC',
 }
 
 function isZhLocale(locale?: string): boolean {
@@ -387,6 +411,27 @@ export const PROVIDER_TUTORIALS: ProviderTutorial[] = [
             {
                 text: 'siliconflow_step1',
                 url: 'https://cloud.siliconflow.cn/account/ak'
+            }
+        ]
+    },
+    {
+        providerId: 'tencent-tokenhub',
+        steps: [
+            {
+                text: 'tencent_tokenhub_step1',
+                url: 'https://tokenhub.tencentmaas.com/'
+            }
+        ]
+    },
+    {
+        providerId: 'tencent-vod',
+        steps: [
+            {
+                text: 'tencent_vod_step1',
+                url: 'https://console.cloud.tencent.com/cam/capi'
+            },
+            {
+                text: 'tencent_vod_step2'
             }
         ]
     },

@@ -1,5 +1,6 @@
 import OpenAI from 'openai'
 import { setProxy } from '../../../lib/prompts/proxy'
+import { callTencentVod, resolveTencentCloudCredentials } from '@/lib/tencent-cloud/client'
 
 export type TestStepName = 'models' | 'textGen' | 'imageGen' | 'credits' | 'audioGen'
 export type TestStepStatus = 'pass' | 'fail' | 'skip'
@@ -20,6 +21,8 @@ export interface TestProviderResult {
 type PresetProviderType = 'ark' | 'google' | 'openrouter' | 'minimax' | 'fal' | 'vidu'
   | 'bailian'
   | 'siliconflow'
+  | 'tencent-tokenhub'
+  | 'tencent-vod'
 type CompatibleProviderType = 'openai-compatible' | 'gemini-compatible'
 
 type TestProviderPayload = {
@@ -543,6 +546,44 @@ async function testOpenRouterProvider(apiKey: string): Promise<TestProviderResul
 // MiniMax
 // ---------------------------------------------------------------------------
 
+async function testTencentVodProvider(apiKey: string): Promise<TestProviderResult> {
+  const steps: TestStep[] = []
+
+  let credentials
+  try {
+    credentials = resolveTencentCloudCredentials(apiKey)
+  } catch (error) {
+    steps.push({
+      name: 'models',
+      status: 'fail',
+      message: toErrorMessage(error),
+    })
+    return { success: false, steps }
+  }
+
+  try {
+    await callTencentVod({
+      action: 'DescribeEventConfig',
+      payload: { SubAppId: credentials.subAppId },
+      credentials,
+      timeoutMs: 30_000,
+    })
+    steps.push({
+      name: 'models',
+      status: 'pass',
+      message: `Credentials OK (SubAppId: ${credentials.subAppId}, Region: ${credentials.region})`,
+    })
+    return { success: true, steps }
+  } catch (error) {
+    steps.push({
+      name: 'models',
+      status: 'fail',
+      message: toErrorMessage(error),
+    })
+    return { success: false, steps }
+  }
+}
+
 async function testMiniMaxProvider(apiKey: string): Promise<TestProviderResult> {
   const steps: TestStep[] = []
   const model = 'MiniMax-M2.5'
@@ -871,6 +912,10 @@ export async function testProviderConnection(payload: TestProviderPayload): Prom
       return testBailianProvider(apiKey)
     case 'siliconflow':
       return testSiliconFlowProvider(apiKey)
+    case 'tencent-tokenhub':
+      return testCompatibleProvider('https://tokenhub.tencentmaas.com/v1', apiKey, llmModel)
+    case 'tencent-vod':
+      return testTencentVodProvider(apiKey)
     default:
       return {
         success: false,
