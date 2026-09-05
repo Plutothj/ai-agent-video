@@ -1,5 +1,5 @@
 import OpenAI from 'openai'
-import { extractCompletionPartsFromContent } from './utils'
+import { collectTextValue, extractCompletionPartsFromContent } from './utils'
 import { _ulogError } from './runtime-shared'
 
 export function getCompletionContent(completion: OpenAI.Chat.Completions.ChatCompletion): string {
@@ -28,5 +28,14 @@ export function getCompletionParts(completion: OpenAI.Chat.Completions.ChatCompl
   }
 
   const content = message.content
-  return extractCompletionPartsFromContent(content)
+  const parsed = extractCompletionPartsFromContent(content)
+  // DeepSeek/Kimi 风格 provider（如腾讯云 TokenHub）在非流式响应中
+  // 把思考内容放在 message.reasoning_content 字段，content 只含正文
+  const messageReasoning =
+    collectTextValue((message as { reasoning_content?: unknown }).reasoning_content) ||
+    collectTextValue((message as { reasoning?: unknown }).reasoning)
+  return {
+    text: parsed.text,
+    reasoning: parsed.reasoning || messageReasoning,
+  }
 }

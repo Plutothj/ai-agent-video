@@ -1,0 +1,15 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ai-agent-video:local
+    environment:
+      # 本地环境仍使用 MinIO（waoowaoo-minio 容器保留运行）
+      STORAGE_TYPE: "minio"
+      MINIO_ENDPOINT: "http://waoowaoo-minio:9000"
+      MINIO_REGION: "us-east-1"
+      MINIO_BUCKET: "waoowaoo"
+      MINIO_ACCESS_KEY: "minioadmin"
+      MINIO_SECRET_KEY: "minioadmin"
+      MINIO_FORCE_PATH_STYLE: "true"

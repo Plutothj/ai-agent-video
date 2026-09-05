@@ -4,7 +4,7 @@ WORKDIR /app
 
 COPY package.json package-lock.json ./
 COPY prisma ./prisma
-RUN npm ci
+RUN npm config set registry https://registry.npmmirror.com && npm install --no-audit --prefer-offline
 
 # ==================== Stage 2: Build ====================
 FROM node:20-alpine AS builder

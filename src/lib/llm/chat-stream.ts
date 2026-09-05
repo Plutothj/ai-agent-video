@@ -471,6 +471,9 @@ export async function chatCompletionStream(
           ...(useReasoning ? {} : { temperature: options.temperature ?? 0.7 }),
           maxRetries: options.maxRetries ?? 2,
           ...(aiSdkProviderOptions ? { providerOptions: aiSdkProviderOptions } : {}),
+          // DeepSeek/Kimi 风格的 reasoning_content 增量不会被 @ai-sdk/openai 解析，
+          // 必须开启 raw chunks 才能在思考阶段拿到增量并喂给 per-chunk 超时看门狗
+          includeRawChunks: true,
         })
 
 
@@ -489,6 +492,21 @@ export async function chatCompletionStream(
         for await (const chunk of withStreamChunkTimeout(aiStreamResult.fullStream as AsyncIterable<AISdkStreamChunk>)) {
           const chunkType = chunk?.type || 'unknown'
           chunkTypeCounts[chunkType] = (chunkTypeCounts[chunkType] || 0) + 1
+          if (chunkType === 'raw') {
+            // reasoning_content 等 DeepSeek 风格思考增量仅存在于 raw chunk 中
+            const rawReasoningDelta = extractStreamDeltaParts((chunk as { rawValue?: unknown }).rawValue).reasoningDelta
+            if (rawReasoningDelta) {
+              reasoning += rawReasoningDelta
+              emitStreamChunk(callbacks, streamStep, {
+                kind: 'reasoning',
+                delta: rawReasoningDelta,
+                seq,
+                lane: 'reasoning',
+              })
+              seq += 1
+            }
+            continue
+          }
           if (chunkType === 'reasoning-delta' && typeof chunk.text === 'string' && chunk.text) {
             reasoning += chunk.text
             emitStreamChunk(callbacks, streamStep, {
