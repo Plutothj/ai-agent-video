@@ -41,7 +41,10 @@ services:
 
   # ==================== App (Next.js + Workers) ====================
   app:
-    image: ghcr.io/saturndec/waoowaoo:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ai-agent-video:local
     container_name: waoowaoo-app
     restart: unless-stopped
     environment:
