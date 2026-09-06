@@ -10,6 +10,12 @@ Character info:
 Location info:
 {locations_description}
 
+Project art style:
+{art_style}
+
+Current chunk photography rules (may be empty):
+{photography_rules}
+
 Task:
 For each panel, output ONE incremental entry containing ONLY: panel_number, shot_type, camera_move, video_prompt.
 Do NOT repeat existing fields (description, characters, location, scene_type, source_text) — the system merges your entries into the original panels automatically.
@@ -46,3 +52,5 @@ These rules take precedence over any conflicting guidance above (shot language l
 13. Bottom-line lock: after the stability tail, append exactly ONE lock sentence for the most failure-prone point, phrased like "Once again: ... — strictly follow, any violation invalidates the result." Never list multiple locks.
 14. Spoken lines must be short enough to finish naturally within one 4-5s shot; for lip-sync shots require natural lip movement.
 15. Self-check each video_prompt: no contradiction with "no text on screen"; character count matches the description; no mixing photoreal and 3D styles; costume / screen position / key-light direction / gaze stay continuous with previous shots.
+16. Style quality pack (fixed append, based on the project art style from input): for 3D/animation style append "no model intersections, no texture flicker, unified material density"; for photoreal style append "real skin texture, no waxy look, no over-smoothing, natural light"; if the style is unspecified, append nothing. Never mix photoreal and 3D quality packs in one prompt.
+17. Photography consistency: if the input provides photography rules (not empty), video_prompt key-light direction, tone and character screen position MUST match the rules of the corresponding panel; if empty, ignore this rule.

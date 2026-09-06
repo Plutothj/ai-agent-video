@@ -50,3 +50,16 @@ export function serializePrevPanelsWithRules(params: {
     }))
     return JSON.stringify(merged, null, 2)
 }
+
+// 当前分块的摄影规则文本：按 panel_number 匹配，一块都没有时返回"无"（供 {photography_rules} 占位符）
+export function serializeRulesForPanels(
+    panels: StoryboardPanel[],
+    photographyRules: PhotographyRule[],
+): string {
+    const matched: PhotographyRule[] = []
+    for (const panel of panels) {
+        const rule = photographyRules.find((item) => item.panel_number === panel.panel_number)
+        if (rule) matched.push(rule)
+    }
+    return matched.length > 0 ? JSON.stringify(matched, null, 2) : '无'
+}

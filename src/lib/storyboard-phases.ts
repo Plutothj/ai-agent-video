@@ -15,6 +15,7 @@ import {
     buildPromptAssetContext,
     compileAssetPromptFragments,
 } from '@/lib/assets/services/asset-prompt-context'
+import { serializeRulesForPanels } from '@/lib/novel-promotion/script-to-storyboard/prev-chunk-context'
 
 // 阶段类型
 export type StoryboardPhase = 1 | '2-cinematography' | '2-acting' | 3
@@ -652,7 +653,8 @@ export async function executePhase3(
     projectId: string,
     projectName: string,
     locale: Locale,
-    taskId?: string
+    taskId?: string,
+    artStyle?: string | null
 ): Promise<PhaseResult> {
     const clipId = formatClipId(clip)
     void taskId
@@ -687,6 +689,8 @@ export async function executePhase3(
         .replace('{characters_age_gender}', filteredFullDescription)  // 改用完整描述
         .replace('{locations_description}', filteredLocationsDescription)
         .replace('{props_description}', filteredPropsDescription)
+        .replace('{art_style}', artStyle || '未指定')
+        .replace('{photography_rules}', serializeRulesForPanels(planPanels, photographyRules || []))
 
     // 记录发送给 AI 的完整 prompt
     logAIAnalysis(session.user.id, session.user.name, projectId, projectName, {
@@ -695,7 +699,6 @@ export async function executePhase3(
         model: novelPromotionData.analysisModel
     })
 
-    void photographyRules
     let finalPanels: StoryboardPanel[] = []
 
     // 失败后重试一次

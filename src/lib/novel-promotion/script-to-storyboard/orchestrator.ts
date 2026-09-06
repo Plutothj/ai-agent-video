@@ -28,6 +28,7 @@ import {
 import {
   buildPrevChunkContextBlock,
   serializePrevPanelsWithRules,
+  serializeRulesForPanels,
   slicePrevItems,
 } from '@/lib/novel-promotion/script-to-storyboard/prev-chunk-context'
 import {
@@ -81,6 +82,8 @@ export type ClipStoryboardPanels = {
 export type ScriptToStoryboardOrchestratorInput = {
   concurrency?: number
   locale?: 'zh' | 'en'
+  /** 项目美术风格（用于分镜视频提示词的风格质量包） */
+  artStyle?: string | null
   clips: ClipInput[]
   novelPromotionData: {
     characters: CharacterAsset[]
@@ -501,6 +504,7 @@ export async function runScriptToStoryboardOrchestrator(
         .replace('{characters_age_gender}', filteredFullDescription)
         .replace('{locations_description}', filteredLocationsDescription)
         .replace('{props_description}', filteredPropsDescription)
+        .replace('{art_style}', input.artStyle || '未指定')
 
       // 单次请求只处理一个面板分块：面板过多时思考+长 JSON 输出容易在尾部截断/漏格，
       // 分块后每次输出体积可控，覆盖校验按块执行，块内失败只重试该块。
@@ -514,6 +518,7 @@ export async function runScriptToStoryboardOrchestrator(
         label: string,
         parseChunk: (text: string, chunkPanels: StoryboardPanel[]) => T[],
         buildPrevContext?: (prevPanels: StoryboardPanel[], prevResults: T[]) => string,
+        buildChunkReplacers?: (chunk: StoryboardPanel[]) => Record<string, string>,
       ): Promise<T[]> => {
         const results: T[] = []
         let chunkStart = 0
@@ -521,9 +526,13 @@ export async function runScriptToStoryboardOrchestrator(
           const prevContext = buildPrevContext
             ? buildPrevContext(slicePrevItems(panels, chunkStart), results)
             : ''
-          const chunkPrompt = templateFilled
+          let chunkPrompt = templateFilled
             .replace('{panels_json}', JSON.stringify(chunk, null, 2))
             .replace(/\{panel_count\}/g, String(chunk.length)) + prevContext
+          const chunkReplacers = buildChunkReplacers ? buildChunkReplacers(chunk) : {}
+          for (const [placeholder, value] of Object.entries(chunkReplacers)) {
+            chunkPrompt = chunkPrompt.split(placeholder).join(value)
+          }
           const { parsed } = await runStepWithRetry(
             runStep, meta, chunkPrompt, action, PHASE_STEP_MAX_OUTPUT_TOKENS,
             (text) => parseChunk(text, chunk),
@@ -598,6 +607,7 @@ export async function runScriptToStoryboardOrchestrator(
               actingDirections,
             }))
           : '',
+        (chunk) => ({ '{photography_rules}': serializeRulesForPanels(chunk, photographyRules) }),
       )
       onStepParsed?.({ stepKey: phase3Meta.stepId, parsed: filteredPhase3Panels })
 

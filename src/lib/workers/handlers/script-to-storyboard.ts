@@ -32,6 +32,7 @@ import { buildPrompt, getPromptTemplate, PROMPT_IDS } from '@/lib/prompt-i18n'
 import { resolveAnalysisModel } from './resolve-analysis-model'
 import { createArtifact } from '@/lib/run-runtime/service'
 import { assertWorkflowRunActive, withWorkflowRunLease } from '@/lib/run-runtime/workflow-lease'
+import { getProjectModels } from '@/lib/workers/utils'
 import {
   parseStoryboardRetryTarget,
   runScriptToStoryboardAtomicRetry,
@@ -163,6 +164,9 @@ export async function handleScriptToStoryboardTask(job: Job<TaskJobData>) {
   const phase2CinematographyTemplate = getPromptTemplate(PROMPT_IDS.NP_AGENT_CINEMATOGRAPHER, job.data.locale)
   const phase2ActingTemplate = getPromptTemplate(PROMPT_IDS.NP_AGENT_ACTING_DIRECTION, job.data.locale)
   const phase3DetailTemplate = getPromptTemplate(PROMPT_IDS.NP_AGENT_STORYBOARD_DETAIL, job.data.locale)
+
+  // 项目美术风格（用于分镜视频提示词的风格质量包与摄影一致性）
+  const projectArtStyle = (await getProjectModels(projectId, job.data.userId).catch(() => null))?.artStyle ?? null
   const payloadMeta = typeof payload.meta === 'object' && payload.meta !== null
     ? (payload.meta as AnyObj)
     : {}
@@ -309,6 +313,7 @@ export async function handleScriptToStoryboardTask(job: Job<TaskJobData>) {
                   retryTarget,
                   retryStepAttempt,
                   locale: job.data.locale,
+                  artStyle: projectArtStyle,
                   clip: {
                     id: clip.id,
                     content: clip.content,
@@ -353,6 +358,7 @@ export async function handleScriptToStoryboardTask(job: Job<TaskJobData>) {
                 return await runScriptToStoryboardOrchestrator({
                   concurrency: workflowConcurrency.analysis,
                   locale: job.data.locale,
+                  artStyle: projectArtStyle,
                   clips: selectedClips.map((clip) => ({
                     id: clip.id,
                     content: clip.content,

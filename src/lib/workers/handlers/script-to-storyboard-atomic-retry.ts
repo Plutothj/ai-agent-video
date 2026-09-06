@@ -36,6 +36,7 @@ import {
 import {
   buildPrevChunkContextBlock,
   serializePrevPanelsWithRules,
+  serializeRulesForPanels,
   slicePrevItems,
 } from '@/lib/novel-promotion/script-to-storyboard/prev-chunk-context'
 
@@ -355,6 +356,8 @@ export async function runScriptToStoryboardAtomicRetry(params: {
   retryTarget: StoryboardRetryTarget
   retryStepAttempt: number
   locale?: 'zh' | 'en'
+  /** 项目美术风格（用于分镜视频提示词的风格质量包） */
+  artStyle?: string | null
   clip: StoryboardClipInput
   clipIndex: number
   totalClipCount: number
@@ -502,6 +505,7 @@ export async function runScriptToStoryboardAtomicRetry(params: {
     label: string,
     parseChunk: (text: string, chunkPanels: StoryboardPanel[]) => T[],
     buildPrevContext?: (prevPanels: StoryboardPanel[], prevResults: T[]) => string,
+    buildChunkReplacers?: (chunk: StoryboardPanel[]) => Record<string, string>,
   ): Promise<T[]> => {
     const results: T[] = []
     let chunkStart = 0
@@ -509,9 +513,13 @@ export async function runScriptToStoryboardAtomicRetry(params: {
       const prevContext = buildPrevContext
         ? buildPrevContext(slicePrevItems(panels, chunkStart), results)
         : ''
-      const chunkPrompt = templateFilled
+      let chunkPrompt = templateFilled
         .replace('{panels_json}', JSON.stringify(chunk, null, 2))
         .replace(/\{panel_count\}/g, String(chunk.length)) + prevContext
+      const chunkReplacers = buildChunkReplacers ? buildChunkReplacers(chunk) : {}
+      for (const [placeholder, value] of Object.entries(chunkReplacers)) {
+        chunkPrompt = chunkPrompt.split(placeholder).join(value)
+      }
       const parsed = await runStepWithRetry({
         runStep: params.runStep,
         baseMeta: meta,
@@ -580,6 +588,7 @@ export async function runScriptToStoryboardAtomicRetry(params: {
       .replace('{characters_age_gender}', filteredFullDescription)
       .replace('{locations_description}', filteredLocationsDescription)
       .replace('{props_description}', filteredPropsDescription)
+      .replace('{art_style}', params.artStyle || '未指定')
     phase3Panels = await runChunkedPhase(
       metaFor('phase3_detail'), phase3TemplateFilled, planPanels,
       'storyboard_phase3_detail', `Phase3 detail for clip ${formatClipId(params.clip)}`,
@@ -606,6 +615,7 @@ export async function runScriptToStoryboardAtomicRetry(params: {
             actingDirections: phase2Acting,
           }))
         : '',
+      (chunk) => ({ '{photography_rules}': serializeRulesForPanels(chunk, phase2Cinematography) }),
     )
     phase3PanelsByClipId[params.clip.id] = phase3Panels
     params.onStepParsed?.({ stepKey: targetFor('phase3_detail').stepKey, parsed: phase3Panels })
