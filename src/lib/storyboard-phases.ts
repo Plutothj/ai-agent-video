@@ -292,11 +292,19 @@ export function mergePhase3Overrides(
 
 // phase1 输出为完整面板数组且面板数未知，上限放宽避免截断
 export const PHASE1_MAX_OUTPUT_TOKENS = 8000
-export function phase2MaxOutputTokens(panelCount: number): number {
-    return Math.max(2400, panelCount * 200)
-}
-export function phase3MaxOutputTokens(panelCount: number): number {
-    return Math.max(2600, panelCount * 160)
+// 分镜阶段统一上限：部分 OpenAI 兼容端点（如 deepseek-flash）把思考 token 也计入
+// max_tokens，答案净预算 = 上限 - 思考消耗，因此必须给足余量（8000 贴近常见 8192 上限）
+export const PHASE_STEP_MAX_OUTPUT_TOKENS = 8000
+// phase2/phase3 按面板分块调用：单次请求面板数过多时，思考+长 JSON 输出容易在尾部截断
+// （实测 28 格的卡稳定在 21-23 条后断掉），分块后每次输出体积可控
+export const PHASE_PANEL_CHUNK_SIZE = 10
+export function chunkByPanelCount<T>(panels: T[], size = PHASE_PANEL_CHUNK_SIZE): T[][] {
+    const chunks: T[][] = []
+    for (let i = 0; i < panels.length; i += size) {
+        const chunk = panels.slice(i, i + size)
+        if (chunk.length > 0) chunks.push(chunk)
+    }
+    return chunks
 }
 
 // ========== Phase 1: 基础分镜规划 ==========
@@ -504,7 +512,7 @@ export async function executePhase2(
                 reasoning: true,
                 projectId,
                 action: 'storyboard_phase2_cinematography',
-                maxOutputTokens: phase2MaxOutputTokens(planPanels.length),
+                maxOutputTokens: PHASE_STEP_MAX_OUTPUT_TOKENS,
                 meta: {
                     stepId: 'storyboard_phase2_cinematography',
                     stepTitle: '摄影规则',
@@ -591,7 +599,7 @@ export async function executePhase2Acting(
                 reasoning: true,
                 projectId,
                 action: 'storyboard_phase2_acting',
-                maxOutputTokens: phase2MaxOutputTokens(planPanels.length),
+                maxOutputTokens: PHASE_STEP_MAX_OUTPUT_TOKENS,
                 meta: {
                     stepId: 'storyboard_phase2_acting',
                     stepTitle: '演技指导',
@@ -699,7 +707,7 @@ export async function executePhase3(
                 reasoning: true,
                 projectId,
                 action: 'storyboard_phase3_detail',
-                maxOutputTokens: phase3MaxOutputTokens(planPanels.length),
+                maxOutputTokens: PHASE_STEP_MAX_OUTPUT_TOKENS,
                 meta: {
                     stepId: 'storyboard_phase3_detail',
                     stepTitle: '镜头细化',

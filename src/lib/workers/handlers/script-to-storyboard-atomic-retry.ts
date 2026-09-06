@@ -12,10 +12,10 @@ import {
 import { listArtifacts } from '@/lib/run-runtime/service'
 import {
   assertPanelNumberCoverage,
+  chunkByPanelCount,
   mergePhase3Overrides,
   PHASE1_MAX_OUTPUT_TOKENS,
-  phase2MaxOutputTokens,
-  phase3MaxOutputTokens,
+  PHASE_STEP_MAX_OUTPUT_TOKENS,
   type ActingDirection,
   type CharacterAsset,
   type ClipCharacterRef,
@@ -467,67 +467,100 @@ export async function runScriptToStoryboardAtomicRetry(params: {
       onStepParsed: params.onStepParsed,
     })
     phase1PanelsByClipId[params.clip.id] = phase1Panels
-  } else if (params.retryTarget.phase === 'phase2_cinematography') {
-    const planPanels = requireRows(phase1Panels, 'storyboard.clip.phase1')
-    const phase2Prompt = params.promptTemplates.phase2CinematographyTemplate
-      .replace('{panels_json}', JSON.stringify(planPanels, null, 2))
-      .replace(/\{panel_count\}/g, String(planPanels.length))
+    // phase1 重跑后旧下游产物全部失效，后续阶段按缺失重新计算
+    phase2Cinematography = []
+    phase2Acting = []
+    phase3Panels = []
+  }
+  const planPanels = requireRows(phase1Panels, 'storyboard.clip.phase1')
+
+  // ===== 断点续跑 =====
+  // 旧逻辑按目标阶段 if/else 分支并要求所有下游产物已存在——phase2 失败时 phase3 产物
+  // 不存在，重试必然死在 requireRows。这里改为顺序补齐：目标阶段重跑，缺失的下游阶段直接接着跑。
+
+  const targetFor = (phase: StoryboardRetryPhase): StoryboardRetryTarget => ({
+    stepKey: `clip_${params.retryTarget.clipId}_${phase}`,
+    clipId: params.retryTarget.clipId,
+    phase,
+  })
+  const metaFor = (phase: StoryboardRetryPhase) =>
+    buildStepMeta({ target: targetFor(phase), clipIndex: params.clipIndex, totalClipCount: params.totalClipCount })
+
+  // 分块执行器：与主流程一致，面板过多时单次请求容易在尾部截断/漏格
+  const runChunkedPhase = async <T extends { panel_number?: unknown }>(
+    meta: ScriptToStoryboardStepMeta,
+    templateFilled: string,
+    panels: StoryboardPanel[],
+    action: string,
+    label: string,
+    parseChunk: (text: string, chunkPanels: StoryboardPanel[]) => T[],
+  ): Promise<T[]> => {
+    const results: T[] = []
+    for (const chunk of chunkByPanelCount(panels)) {
+      const chunkPrompt = templateFilled
+        .replace('{panels_json}', JSON.stringify(chunk, null, 2))
+        .replace(/\{panel_count\}/g, String(chunk.length))
+      const parsed = await runStepWithRetry({
+        runStep: params.runStep,
+        baseMeta: meta,
+        prompt: chunkPrompt,
+        action,
+        maxOutputTokens: PHASE_STEP_MAX_OUTPUT_TOKENS,
+        parse: (text) => parseChunk(text, chunk),
+        retryStepAttempt: params.retryStepAttempt,
+      })
+      results.push(...parsed)
+    }
+    assertPanelNumberCoverage(results, panels, label)
+    return results
+  }
+
+  if (params.retryTarget.phase === 'phase2_cinematography' || phase2Cinematography.length === 0) {
+    const phase2TemplateFilled = params.promptTemplates.phase2CinematographyTemplate
       .replace('{locations_description}', filteredLocationsDescription)
       .replace('{characters_info}', filteredFullDescription)
       .replace('{props_description}', filteredPropsDescription)
-    phase2Cinematography = await runStepWithRetry({
-      runStep: params.runStep,
-      baseMeta,
-      prompt: phase2Prompt,
-      action: 'storyboard_phase2_cinematography',
-      maxOutputTokens: phase2MaxOutputTokens(planPanels.length),
-      parse: (text) => {
+    phase2Cinematography = await runChunkedPhase(
+      metaFor('phase2_cinematography'), phase2TemplateFilled, planPanels,
+      'storyboard_phase2_cinematography', `Phase2 cinematography for clip ${formatClipId(params.clip)}`,
+      (text, chunkPanels) => {
         const rules = parseJsonArray<PhotographyRule>(text, `phase2:${formatClipId(params.clip)}`)
-        assertRulePanelCoverage(rules, planPanels, `Phase2 cinematography for clip ${formatClipId(params.clip)}`)
+        assertRulePanelCoverage(rules, chunkPanels, `Phase2 cinematography for clip ${formatClipId(params.clip)}`)
         return rules
       },
-      retryStepAttempt: params.retryStepAttempt,
-      onStepParsed: params.onStepParsed,
-    })
+    )
     phase2CinematographyByClipId[params.clip.id] = phase2Cinematography
-  } else if (params.retryTarget.phase === 'phase2_acting') {
-    const planPanels = requireRows(phase1Panels, 'storyboard.clip.phase1')
-    const phase2ActingPrompt = params.promptTemplates.phase2ActingTemplate
-      .replace('{panels_json}', JSON.stringify(planPanels, null, 2))
-      .replace(/\{panel_count\}/g, String(planPanels.length))
+    params.onStepParsed?.({ stepKey: targetFor('phase2_cinematography').stepKey, parsed: phase2Cinematography })
+  }
+
+  if (params.retryTarget.phase === 'phase2_acting' || phase2Acting.length === 0) {
+    const phase2ActingTemplateFilled = params.promptTemplates.phase2ActingTemplate
       .replace('{characters_info}', filteredFullDescription)
-    phase2Acting = await runStepWithRetry({
-      runStep: params.runStep,
-      baseMeta,
-      prompt: phase2ActingPrompt,
-      action: 'storyboard_phase2_acting',
-      maxOutputTokens: phase2MaxOutputTokens(planPanels.length),
-      parse: (text) => {
+    phase2Acting = await runChunkedPhase(
+      metaFor('phase2_acting'), phase2ActingTemplateFilled, planPanels,
+      'storyboard_phase2_acting', `Phase2 acting for clip ${formatClipId(params.clip)}`,
+      (text, chunkPanels) => {
         const directions = parseJsonArray<ActingDirection>(text, `phase2-acting:${formatClipId(params.clip)}`)
-        assertRulePanelCoverage(directions, planPanels, `Phase2 acting for clip ${formatClipId(params.clip)}`)
+        assertRulePanelCoverage(directions, chunkPanels, `Phase2 acting for clip ${formatClipId(params.clip)}`)
         return directions
       },
-      retryStepAttempt: params.retryStepAttempt,
-      onStepParsed: params.onStepParsed,
-    })
+    )
     phase2ActingByClipId[params.clip.id] = phase2Acting
-  } else {
-    const planPanels = requireRows(phase1Panels, 'storyboard.clip.phase1')
-    const phase3Prompt = params.promptTemplates.phase3DetailTemplate
-      .replace('{panels_json}', JSON.stringify(planPanels, null, 2))
+    params.onStepParsed?.({ stepKey: targetFor('phase2_acting').stepKey, parsed: phase2Acting })
+  }
+
+  if (params.retryTarget.phase === 'phase3_detail' || phase3Panels.length === 0) {
+    const phase3TemplateFilled = params.promptTemplates.phase3DetailTemplate
       .replace('{characters_age_gender}', filteredFullDescription)
       .replace('{locations_description}', filteredLocationsDescription)
       .replace('{props_description}', filteredPropsDescription)
-    phase3Panels = await runStepWithRetry({
-      runStep: params.runStep,
-      baseMeta,
-      prompt: phase3Prompt,
-      action: 'storyboard_phase3_detail',
-      maxOutputTokens: phase3MaxOutputTokens(planPanels.length),
-      parse: (text) => {
+    phase3Panels = await runChunkedPhase(
+      metaFor('phase3_detail'), phase3TemplateFilled, planPanels,
+      'storyboard_phase3_detail', `Phase3 detail for clip ${formatClipId(params.clip)}`,
+      (text, chunkPanels) => {
         const overrides = parseJsonArray<StoryboardPanel>(text, `phase3:${formatClipId(params.clip)}`)
-        assertPanelNumberCoverage(overrides, planPanels, `Phase3 detail for clip ${formatClipId(params.clip)}`)
-        const merged = mergePhase3Overrides(planPanels, overrides)
+        assertPanelNumberCoverage(overrides, chunkPanels, `Phase3 detail for clip ${formatClipId(params.clip)}`)
+        const merged = mergePhase3Overrides(chunkPanels, overrides)
         const filtered = merged.filter(
           (panel) => panel.description && panel.description !== '无' && panel.location !== '无',
         )
@@ -536,24 +569,21 @@ export async function runScriptToStoryboardAtomicRetry(params: {
         }
         return filtered
       },
-      retryStepAttempt: params.retryStepAttempt,
-      onStepParsed: params.onStepParsed,
-    })
+    )
     phase3PanelsByClipId[params.clip.id] = phase3Panels
+    params.onStepParsed?.({ stepKey: targetFor('phase3_detail').stepKey, parsed: phase3Panels })
   }
 
-  if (params.retryTarget.phase !== 'phase1') {
-    const finalPanels = mergePanelsWithRules({
-      finalPanels: requireRows(phase3Panels, 'storyboard.clip.phase3'),
-      photographyRules: requireRows(phase2Cinematography, 'storyboard.clip.phase2.cine'),
-      actingDirections: requireRows(phase2Acting, 'storyboard.clip.phase2.acting'),
-    })
-    clipPanels.push({
-      clipId: params.clip.id,
-      clipIndex: params.clipIndex + 1,
-      finalPanels,
-    })
-  }
+  const finalPanels = mergePanelsWithRules({
+    finalPanels: requireRows(phase3Panels, 'storyboard.clip.phase3'),
+    photographyRules: requireRows(phase2Cinematography, 'storyboard.clip.phase2.cine'),
+    actingDirections: requireRows(phase2Acting, 'storyboard.clip.phase2.acting'),
+  })
+  clipPanels.push({
+    clipId: params.clip.id,
+    clipIndex: params.clipIndex + 1,
+    finalPanels,
+  })
 
   const totalPanelCount = clipPanels.reduce((sum, item) => sum + item.finalPanels.length, 0)
   return {

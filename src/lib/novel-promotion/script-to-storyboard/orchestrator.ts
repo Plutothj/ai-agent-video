@@ -5,10 +5,10 @@ import { createScopedLogger } from '@/lib/logging/core'
 import { mapWithConcurrency } from '@/lib/async/map-with-concurrency'
 import {
   assertPanelNumberCoverage,
+  chunkByPanelCount,
   mergePhase3Overrides,
   PHASE1_MAX_OUTPUT_TOKENS,
-  phase2MaxOutputTokens,
-  phase3MaxOutputTokens,
+  PHASE_STEP_MAX_OUTPUT_TOKENS,
   type ActingDirection,
   type CharacterAsset,
   type ClipCharacterRef,
@@ -483,53 +483,75 @@ export async function runScriptToStoryboardOrchestrator(
         },
       )
 
-      const phase2Prompt = promptTemplates.phase2CinematographyTemplate
-        .replace('{panels_json}', JSON.stringify(planPanels, null, 2))
-        .replace(/\{panel_count\}/g, String(planPanels.length))
+      const phase2TemplateFilled = promptTemplates.phase2CinematographyTemplate
         .replace('{locations_description}', filteredLocationsDescription)
         .replace('{characters_info}', filteredFullDescription)
         .replace('{props_description}', filteredPropsDescription)
 
-      const phase2ActingPrompt = promptTemplates.phase2ActingTemplate
-        .replace('{panels_json}', JSON.stringify(planPanels, null, 2))
-        .replace(/\{panel_count\}/g, String(planPanels.length))
+      const phase2ActingTemplateFilled = promptTemplates.phase2ActingTemplate
         .replace('{characters_info}', filteredFullDescription)
 
-      const phase3Prompt = promptTemplates.phase3DetailTemplate
-        .replace('{panels_json}', JSON.stringify(planPanels, null, 2))
+      const phase3TemplateFilled = promptTemplates.phase3DetailTemplate
         .replace('{characters_age_gender}', filteredFullDescription)
         .replace('{locations_description}', filteredLocationsDescription)
         .replace('{props_description}', filteredPropsDescription)
 
-      const [
-        { parsed: photographyRules },
-        { parsed: actingDirections },
-      ] = await Promise.all([
-        runStepWithRetry(
-          runStep, phase2Meta, phase2Prompt, 'storyboard_phase2_cinematography', phase2MaxOutputTokens(planPanels.length),
-          (text) => {
+      // 单次请求只处理一个面板分块：面板过多时思考+长 JSON 输出容易在尾部截断/漏格，
+      // 分块后每次输出体积可控，覆盖校验按块执行，块内失败只重试该块
+      const runChunkedPhase = async <T extends { panel_number?: unknown }>(
+        meta: ScriptToStoryboardStepMeta,
+        templateFilled: string,
+        panels: StoryboardPanel[],
+        action: string,
+        label: string,
+        parseChunk: (text: string, chunkPanels: StoryboardPanel[]) => T[],
+      ): Promise<T[]> => {
+        const results: T[] = []
+        for (const chunk of chunkByPanelCount(panels)) {
+          const chunkPrompt = templateFilled
+            .replace('{panels_json}', JSON.stringify(chunk, null, 2))
+            .replace(/\{panel_count\}/g, String(chunk.length))
+          const { parsed } = await runStepWithRetry(
+            runStep, meta, chunkPrompt, action, PHASE_STEP_MAX_OUTPUT_TOKENS,
+            (text) => parseChunk(text, chunk),
+            undefined,
+          )
+          results.push(...parsed)
+        }
+        assertPanelNumberCoverage(results, panels, label)
+        return results
+      }
+
+      const [photographyRules, actingDirections] = await Promise.all([
+        runChunkedPhase(
+          phase2Meta, phase2TemplateFilled, planPanels, 'storyboard_phase2_cinematography',
+          `Phase2 cinematography for clip ${formatClipId(clip)}`,
+          (text, chunkPanels) => {
             const rules = parseJsonArray<PhotographyRule>(text, `phase2:${formatClipId(clip)}`)
-            assertRulePanelCoverage(rules, planPanels, `Phase2 cinematography for clip ${formatClipId(clip)}`)
+            assertRulePanelCoverage(rules, chunkPanels, `Phase2 cinematography for clip ${formatClipId(clip)}`)
             return rules
           },
-          onStepParsed,
         ),
-        runStepWithRetry(
-          runStep, phase2ActingMeta, phase2ActingPrompt, 'storyboard_phase2_acting', phase2MaxOutputTokens(planPanels.length),
-          (text) => {
+        runChunkedPhase(
+          phase2ActingMeta, phase2ActingTemplateFilled, planPanels, 'storyboard_phase2_acting',
+          `Phase2 acting for clip ${formatClipId(clip)}`,
+          (text, chunkPanels) => {
             const directions = parseJsonArray<ActingDirection>(text, `phase2-acting:${formatClipId(clip)}`)
-            assertRulePanelCoverage(directions, planPanels, `Phase2 acting for clip ${formatClipId(clip)}`)
+            assertRulePanelCoverage(directions, chunkPanels, `Phase2 acting for clip ${formatClipId(clip)}`)
             return directions
           },
-          onStepParsed,
         ),
       ])
-      const { parsed: filteredPhase3Panels } = await runStepWithRetry(
-        runStep, phase3Meta, phase3Prompt, 'storyboard_phase3_detail', phase3MaxOutputTokens(planPanels.length),
-        (text) => {
+      onStepParsed?.({ stepKey: phase2Meta.stepId, parsed: photographyRules })
+      onStepParsed?.({ stepKey: phase2ActingMeta.stepId, parsed: actingDirections })
+
+      const filteredPhase3Panels = await runChunkedPhase(
+        phase3Meta, phase3TemplateFilled, planPanels, 'storyboard_phase3_detail',
+        `Phase3 detail for clip ${formatClipId(clip)}`,
+        (text, chunkPanels) => {
           const overrides = parseJsonArray<StoryboardPanel>(text, `phase3:${formatClipId(clip)}`)
-          assertPanelNumberCoverage(overrides, planPanels, `Phase3 detail for clip ${formatClipId(clip)}`)
-          const merged = mergePhase3Overrides(planPanels, overrides)
+          assertPanelNumberCoverage(overrides, chunkPanels, `Phase3 detail for clip ${formatClipId(clip)}`)
+          const merged = mergePhase3Overrides(chunkPanels, overrides)
           const filtered = merged.filter(
             (panel) => panel.description && panel.description !== '无' && panel.location !== '无',
           )
@@ -538,8 +560,8 @@ export async function runScriptToStoryboardOrchestrator(
           }
           return filtered
         },
-        onStepParsed,
       )
+      onStepParsed?.({ stepKey: phase3Meta.stepId, parsed: filteredPhase3Panels })
 
       phase2CinematographyByClipId.set(clip.id, photographyRules)
       phase2ActingByClipId.set(clip.id, actingDirections)
