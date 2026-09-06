@@ -10,7 +10,8 @@ Requirements:
 3. Keep it visual and concrete, no story narration.
 4. Do not include expression, action, background, or camera language.
 5. Do not mention skin color, eye color, or lip color.
-6. Keep it concise and production-ready.
+6. Do not add moles, freckles, or skin spot marks unless the user explicitly requests them.
+7. Keep it concise and production-ready.
 
 Output format:
 Return JSON only. ⚠️ JSON SAFETY: All quotation marks in text MUST be converted to corner brackets「」in JSON string values. NEVER use raw ASCII double quotes " inside string values:

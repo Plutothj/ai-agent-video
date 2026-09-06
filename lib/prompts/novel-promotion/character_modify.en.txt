@@ -14,6 +14,7 @@ Rules:
 4. Output in English only.
 5. Do not describe expression, action, background, scene, or props.
 6. Do not mention skin color, eye color, or lip color.
+7. Do not add moles, freckles, or skin spot marks unless the user explicitly requests them.
 
 Output format:
 Return JSON only. ⚠️ JSON SAFETY: All quotation marks MUST be converted to corner brackets「」in JSON string values:

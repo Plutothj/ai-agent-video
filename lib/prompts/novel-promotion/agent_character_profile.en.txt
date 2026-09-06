@@ -22,6 +22,7 @@ Extraction rules:
 Field rules:
 - role_level: one of S/A/B/C/D based on narrative importance
 - costume_tier: 1-5 based on social identity (not role_level)
+- primary_identifier: only fill in when the source text explicitly describes a fixed signature trait (copy it verbatim); otherwise leave it empty. Never invent signature features such as moles, scars, dyed hair colors, or signature accessories.
 - expected_appearances: always include at least one initial appearance
 - introduction: include identity, relationship mapping, and common address mapping
 
@@ -42,7 +43,7 @@ Output format (JSON only):
       "occupation": "occupation or none",
       "costume_tier": 3,
       "suggested_colors": ["color1", "color2"],
-      "primary_identifier": "signature visual marker",
+      "primary_identifier": "",
       "visual_keywords": ["keyword1", "keyword2"],
       "expected_appearances": [
         { "id": 1, "change_reason": "initial appearance" }
@@ -64,7 +65,7 @@ Output format (JSON only):
       "occupation": "occupation or none",
       "costume_tier": 3,
       "suggested_colors": ["color1", "color2"],
-      "primary_identifier": "signature visual marker",
+      "primary_identifier": "",
       "visual_keywords": ["keyword1", "keyword2"],
       "expected_appearances": [
         { "id": 1, "change_reason": "initial appearance" }

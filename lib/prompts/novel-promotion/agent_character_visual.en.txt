@@ -9,9 +9,10 @@ Rules:
 2. Convert personality/social identity into visual details (face, hair, outfit, accessories).
 3. Support both human and non-human characters.
 4. Respect era_period and costume_tier.
-5. If primary_identifier exists, include it clearly in each main description.
+5. If and only if primary_identifier is non-empty (a fixed trait explicitly described in the source text), include it verbatim in each main description. Never invent signature features such as moles, scars, dyed hair colors, or signature accessories; character distinctiveness must come from natural overall appearance differences, and must not be a repeated signature trait across characters.
 6. Do not include expression, action, background, or plot narration.
 7. Do not include skin color, eye color, or lip color.
+8. Do not add moles, freckles, or skin spot marks unless the profile explicitly requires them.
 
 Appearance strategy:
 - Initial appearance should be complete and self-contained.
