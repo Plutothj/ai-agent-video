@@ -71,6 +71,7 @@ export function useVideoPanelActions({
     defaultVideoModel,
     capabilityOverrides,
     userVideoModels,
+    preferredDuration: panel.textPanel?.duration ?? undefined,
   })
 
   const player = usePanelPlayer({

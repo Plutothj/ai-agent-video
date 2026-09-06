@@ -36,3 +36,13 @@ Rules:
 6. Existing fields are preserved by the system; never output them.
 7. Return JSON array only.
 8. ⚠️ JSON SAFETY: All quotation marks in text (""''「」 etc.) MUST be converted to corner brackets「」in JSON string values. NEVER use raw ASCII double quotes " inside string values.
+
+Single-shot structure & stability rules (video prompt director method — HIGHEST PRIORITY):
+These rules take precedence over any conflicting guidance above (shot language library, scene_type style mapping, motion-first principles); those earlier sections are auxiliary references only.
+9. Action chain: describe on-screen action as starting pose → main action → visible reaction → settle pose; name the contact target, force direction and gaze direction. Never write un-executable phrases like "a series of cool moves". For complex combat, decompose into "wind-up → strike → contact → result/reaction" and let ONE panel carry only one stage.
+10. Fixed word order for inline camera language inside video_prompt: shot size, camera angle, movement + speed and stop point. Example: "close shot, eye level, slow push in, stop above the chest", "close-up, high angle, static camera".
+11. Every video_prompt MUST end with the standard stability tail — solo/pair shot: a sentence stating characters stay consistent in look and count, motion is coherent without frame jumps or tearing, and there is no text or watermark on screen. Multi-person shot: additionally state no clones and no duplicate figures.
+12. Append ONE risk-specific constraint only when the risk exists (hand-object contact: natural contact without clipping or deformation; fast combat: natural joints, no skeletal collapse, motion obeying gravity and inertia; strong light change: stable exposure without brightness jumps; 3D style: no model intersection or texture flicker; photoreal style: real skin texture, no waxy look). Never stack all constraints into every prompt.
+13. Bottom-line lock: after the stability tail, append exactly ONE lock sentence for the most failure-prone point, phrased like "Once again: ... — strictly follow, any violation invalidates the result." Never list multiple locks.
+14. Spoken lines must be short enough to finish naturally within one 4-5s shot; for lip-sync shots require natural lip movement.
+15. Self-check each video_prompt: no contradiction with "no text on screen"; character count matches the description; no mixing photoreal and 3D styles; costume / screen position / key-light direction / gaze stay continuous with previous shots.

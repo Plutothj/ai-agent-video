@@ -20,7 +20,7 @@ Rules:
 2. Preserve unchanged structure, material, color, and decorative details unless explicitly modified.
 3. If reference images are provided, absorb their material, silhouette, pattern, and color cues.
 4. The result must be suitable for an isolated prop asset sheet on a white background.
-5. Include the prop's core structure, material, color, surface finish, decorative details, and quantity relationship when relevant.
+5. Include the prop's core structure, material, color, surface finish, decorative details, and quantity relationship when relevant; describe structural logic (joints, opening/closing) so all multi-view angles stay structurally consistent.
 6. Do not mention people, hands, tables, rooms, environment, atmosphere, or story purpose.
 7. Return one concise English visual description.
 

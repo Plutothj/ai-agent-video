@@ -12,6 +12,7 @@ Requirements:
 5. Do not mention skin color, eye color, or lip color.
 6. Do not add moles, freckles, or skin spot marks unless the user explicitly requests them.
 7. Keep it concise and production-ready.
+8. Cross-image consistency: facial structure (face shape, bone structure, features) and hairstyle (color, length, structure) are the main identity anchors — make them specific and reproducible; never rely on ephemeral details.
 
 Output format:
 Return JSON only. ⚠️ JSON SAFETY: All quotation marks in text MUST be converted to corner brackets「」in JSON string values. NEVER use raw ASCII double quotes " inside string values:

@@ -42,7 +42,7 @@ Output format (JSON array only):
     "shot_type": "medium shot",
     "camera_move": "static",
     "video_prompt": "short visual motion prompt",
-    "duration": 3
+    "duration": 5
   }
 ]
 
@@ -61,3 +61,4 @@ Planning rules:
 12. ⚠️ JSON SAFETY: All quotation marks in text (""''「」 etc.) MUST be converted to corner brackets「」in JSON string values. NEVER use raw ASCII double quotes " inside string values.
 13. Pacing target: roughly 40-60 characters of source text per shot (about 8-12 shots per 450 characters). Merge continuous actions and ordinary dialogue into single shots; only key turning points deserve a separate shot.
 14. Dialogue: the speaker must get their own shot focused on their face (lip-sync requirement); add a listener-reaction shot only at key emotional beats.
+15. Output an integer `duration` (seconds, 4-12) for EVERY panel, matched to content density: 4-5s for ordinary action/dialogue/reaction shots, 6-8s for establishing/emotional/atmosphere shots, 8-12s for epic or complex staging. Never output the same value for all panels.

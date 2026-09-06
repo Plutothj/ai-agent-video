@@ -12,6 +12,8 @@ interface UsePanelVideoModelParams {
   defaultVideoModel: string
   capabilityOverrides?: CapabilitySelections
   userVideoModels?: VideoModelOption[]
+  /** 分镜规划的目标时长（秒）：用户未手动选择时长时，作为默认档位吸附到模型支持的最近选项 */
+  preferredDuration?: number
 }
 
 interface CapabilityField {
@@ -46,6 +48,20 @@ function isGenerationOptionValue(value: unknown): value is VideoGenerationOption
   return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
 }
 
+function pickNearestDurationOption(
+  preferred: number,
+  options: VideoGenerationOptionValue[],
+): VideoGenerationOptionValue | undefined {
+  const numericOptions = options.filter((option): option is number => typeof option === 'number')
+  if (numericOptions.length === 0) return undefined
+  return numericOptions.slice().sort((left, right) => {
+    const leftDelta = Math.abs(left - preferred)
+    const rightDelta = Math.abs(right - preferred)
+    if (leftDelta !== rightDelta) return leftDelta - rightDelta
+    return right - left
+  })[0]
+}
+
 function readSelectionForModel(
   capabilityOverrides: CapabilitySelections | undefined,
   modelKey: string,
@@ -67,6 +83,7 @@ export function usePanelVideoModel({
   defaultVideoModel,
   capabilityOverrides,
   userVideoModels,
+  preferredDuration,
 }: UsePanelVideoModelParams) {
   const [selectedModel, setSelectedModel] = useState(defaultVideoModel || '')
   const [generationOptions, setGenerationOptions] = useState<VideoGenerationOptions>(() =>
@@ -116,13 +133,26 @@ export function usePanelVideoModel({
     [selectedModelOverrides],
   )
 
+  // 分镜目标时长吸附：仅当用户没有手动选过该模型的时长时才作为默认值
+  const preferredDurationSeed = useMemo(() => {
+    if (typeof preferredDuration !== 'number' || !Number.isFinite(preferredDuration) || preferredDuration <= 0) {
+      return undefined
+    }
+    if (selectedModelOverrides.duration !== undefined) return undefined
+    const durationDefinition = capabilityDefinitions.find((definition) => definition.field === 'duration')
+    if (!durationDefinition) return undefined
+    return pickNearestDurationOption(preferredDuration, durationDefinition.options)
+  }, [capabilityDefinitions, preferredDuration, selectedModelOverrides])
+
   useEffect(() => {
     setGenerationOptions(normalizeVideoGenerationSelections({
       definitions: capabilityDefinitions,
       pricingTiers,
-      selection: selectedModelOverrides,
+      selection: preferredDurationSeed !== undefined
+        ? { duration: preferredDurationSeed, ...selectedModelOverrides }
+        : selectedModelOverrides,
     }))
-  }, [selectedModel, selectedModelOverridesSignature, capabilityDefinitions, pricingTiers, selectedModelOverrides])
+  }, [selectedModel, selectedModelOverridesSignature, capabilityDefinitions, pricingTiers, selectedModelOverrides, preferredDurationSeed])
 
   useEffect(() => {
     setGenerationOptions((previous) => normalizeVideoGenerationSelections({

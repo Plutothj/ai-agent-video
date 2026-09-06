@@ -11,12 +11,14 @@ Rules:
 4. Make foreground, midground, and background explicit.
 5. Define at least 3 clear anchor objects or anchor areas and make the nearby open space visible.
 6. If the user input is generic, such as 「classroom」 or 「office」, proactively make it specific enough for stable image layout instead of staying generic.
-7. Mention lighting direction and atmosphere.
-8. No protagonist actions or dialogue.
-9. If crowd is implied by context, use generic crowd terms only (guests, pedestrians, audience).
-10. Also generate 2-6 fixed `available_slots` as complete descriptive placement phrases tied to concrete scene anchors.
-11. Do not mention posture, action, or emotion in `available_slots`. Describe position only.
-12. Every anchor mentioned in `available_slots` must appear clearly in the scene prompt.
+7. Mention key-light source, direction, and color temperature, plus the light/dark contrast effect.
+8. Define dominant, secondary, and accent colors with rough proportions; never mix conflicting styles.
+9. Keep era, region, materials, structures, furnishings, and wear consistent with the scene's worldview; no structural or perspective distortion. (The system appends quality and no-text/no-watermark constraints automatically.)
+10. No protagonist actions or dialogue.
+11. If crowd is implied by context, use generic crowd terms only (guests, pedestrians, audience).
+12. Also generate 2-6 fixed `available_slots` as complete descriptive placement phrases tied to concrete scene anchors.
+13. Do not mention posture, action, or emotion in `available_slots`. Describe position only.
+14. Every anchor mentioned in `available_slots` must appear clearly in the scene prompt.
 
 Output format:
 Return JSON only. ⚠️ JSON SAFETY: All quotation marks MUST be converted to corner brackets「」in JSON string values:
