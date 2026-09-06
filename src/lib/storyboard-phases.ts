@@ -290,11 +290,12 @@ export function mergePhase3Overrides(
     })
 }
 
-// phase1 输出为完整面板数组且面板数未知，上限放宽避免截断
-export const PHASE1_MAX_OUTPUT_TOKENS = 8000
-// 分镜阶段统一上限：部分 OpenAI 兼容端点（如 deepseek-flash）把思考 token 也计入
-// max_tokens，答案净预算 = 上限 - 思考消耗，因此必须给足余量（8000 贴近常见 8192 上限）
-export const PHASE_STEP_MAX_OUTPUT_TOKENS = 8000
+// phase1 输出为完整面板数组且面板数未知。
+// deepseek-flash 端点支持 max_tokens 至 128000 且思考 token 计入 max_tokens，
+// 上限直接给满，彻底避免思考+长答案被截断（上限只是天花板，不会多花钱/多生成）
+export const PHASE1_MAX_OUTPUT_TOKENS = 128000
+// 分镜阶段统一输出上限（思考计入，同上给满）
+export const PHASE_STEP_MAX_OUTPUT_TOKENS = 128000
 // phase2/phase3 按面板分块调用：单次请求面板数过多时，思考+长 JSON 输出容易在尾部截断
 // （实测 28 格的卡稳定在 21-23 条后断掉），分块后每次输出体积可控
 export const PHASE_PANEL_CHUNK_SIZE = 10
