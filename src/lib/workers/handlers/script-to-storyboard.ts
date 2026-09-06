@@ -40,6 +40,21 @@ import {
 type AnyObj = Record<string, unknown>
 const MAX_VOICE_ANALYZE_ATTEMPTS = 2
 
+const STORYBOARD_ARTIFACT_TYPES_BY_PHASE: Record<string, string> = {
+  phase1: 'storyboard.clip.phase1',
+  phase2_cinematography: 'storyboard.clip.phase2.cine',
+  phase2_acting: 'storyboard.clip.phase2.acting',
+  phase3_detail: 'storyboard.clip.phase3',
+}
+
+function storyboardArtifactPayload(phase: string, parsed: unknown): Record<string, unknown> | null {
+  if (!Array.isArray(parsed) || parsed.length === 0) return null
+  if (phase === 'phase1' || phase === 'phase3_detail') return { panels: parsed }
+  if (phase === 'phase2_cinematography') return { rules: parsed }
+  if (phase === 'phase2_acting') return { directions: parsed }
+  return null
+}
+
 function buildWorkflowWorkerId(job: Job<TaskJobData>, label: string) {
   return `${label}:${job.queueName}:${job.data.taskId}`
 }
@@ -158,6 +173,22 @@ export async function handleScriptToStoryboardTask(job: Job<TaskJobData>) {
     throw new Error('runId is required for script_to_storyboard pipeline')
   }
   const workerId = buildWorkflowWorkerId(job, 'script_to_storyboard')
+  // 步骤解析成功后立即落库产物：重试路径依赖 storyboard.clip.phase1 等中间产物，
+  // 若等整个 run 成功才写，任何一步失败都会让后续步骤级重试必然失败
+  const persistStepArtifact = async (params: { stepKey: string, parsed: unknown }) => {
+    const target = parseStoryboardRetryTarget(params.stepKey)
+    if (!target) return
+    const artifactType = STORYBOARD_ARTIFACT_TYPES_BY_PHASE[target.phase]
+    const payload = storyboardArtifactPayload(target.phase, params.parsed)
+    if (!artifactType || !payload) return
+    await createArtifact({
+      runId,
+      stepKey: params.stepKey,
+      artifactType,
+      refId: target.clipId,
+      payload,
+    })
+  }
   const assertRunActive = async (stage: string) => {
     await assertWorkflowRunActive({
       runId,
@@ -187,9 +218,8 @@ export async function handleScriptToStoryboardTask(job: Job<TaskJobData>) {
     meta: ScriptToStoryboardStepMeta,
     prompt: string,
     action: string,
-    _maxOutputTokens: number,
+    maxOutputTokens: number,
   ): Promise<ScriptToStoryboardStepOutput> => {
-    void _maxOutputTokens
     const stepAttempt = meta.stepAttempt
       || (retryStepKey && meta.stepId === retryStepKey ? retryStepAttempt : 1)
     await assertRunActive(`script_to_storyboard_step:${meta.stepId}`)
@@ -230,6 +260,7 @@ export async function handleScriptToStoryboardTask(job: Job<TaskJobData>) {
       temperature,
       reasoning,
       reasoningEffort,
+      maxOutputTokens,
     })
     await callbacks.flush()
 
@@ -302,6 +333,7 @@ export async function handleScriptToStoryboardTask(job: Job<TaskJobData>) {
                     phase3DetailTemplate,
                   },
                   runStep,
+                  onStepParsed: persistStepArtifact,
                 })
                 return {
                   clipPanels: atomicResult.clipPanels,
@@ -343,6 +375,7 @@ export async function handleScriptToStoryboardTask(job: Job<TaskJobData>) {
                     phase3DetailTemplate,
                   },
                   runStep,
+                  onStepParsed: persistStepArtifact,
                 })
               } catch (error) {
                 if (error instanceof JsonParseError) {

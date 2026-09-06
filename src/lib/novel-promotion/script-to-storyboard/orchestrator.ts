@@ -4,6 +4,11 @@ import { normalizeAnyError } from '@/lib/errors/normalize'
 import { createScopedLogger } from '@/lib/logging/core'
 import { mapWithConcurrency } from '@/lib/async/map-with-concurrency'
 import {
+  assertPanelNumberCoverage,
+  mergePhase3Overrides,
+  PHASE1_MAX_OUTPUT_TOKENS,
+  phase2MaxOutputTokens,
+  phase3MaxOutputTokens,
   type ActingDirection,
   type CharacterAsset,
   type ClipCharacterRef,
@@ -84,6 +89,12 @@ export type ScriptToStoryboardOrchestratorInput = {
     action: string,
     maxOutputTokens: number,
   ) => Promise<ScriptToStoryboardStepOutput>
+  /**
+   * 每个步骤解析成功后立即回调（用于把中间产物按步骤持久化为 GraphArtifact）。
+   * 产物必须逐步落库：否则任一步骤失败会导致整个 run 没有任何产物，后续步骤级重试
+   * 会因缺少 storyboard.clip.phase1 等依赖产物而必然失败。
+   */
+  onStepParsed?: (params: { stepKey: string, parsed: unknown }) => Promise<void>
 }
 
 export type ScriptToStoryboardOrchestratorResult = {
@@ -115,6 +126,46 @@ function parseJsonArray<T extends JsonRecord>(responseText: string, label: strin
     throw new JsonParseError(`${label}: empty result`, responseText)
   }
   return rows as T[]
+}
+
+function panelNumberKey(value: unknown): string {
+  if (value === undefined || value === null) return ''
+  if (typeof value === 'number' || typeof value === 'string') return String(value)
+  return ''
+}
+
+/**
+ * 校验行业规则（摄影/表演）覆盖了 phase1 的全部面板编号。
+ * 一旦 LLM 输出缺漏或拼错编号，必须在 parse 阶段地内抛错走重试，
+ * 而不是等到最终 merge 阶段抛出不可重试的硬错误（否则整个 run 直接失败）。
+ */
+export function assertRulePanelCoverage<T extends { panel_number?: unknown }>(
+  rows: T[],
+  expected: StoryboardPanel[],
+  label: string,
+): void {
+  assertPanelNumberCoverage(rows, expected, label, 'rules')
+}
+
+/**
+ * 校验 phase3 输出的面板集合与 phase1 完全一致（缺失或多余都算失败）。
+ * phase3 是最终面板数据，LLM 擅自增删面板会导致后续 merge/视频流程错位。
+ */
+export function assertPhase3PanelSet<T extends { panel_number?: unknown }>(
+  rows: T[],
+  expected: StoryboardPanel[],
+  label: string,
+): void {
+  const expectedNums = new Set(expected.map((p) => panelNumberKey(p.panel_number)))
+  const actualNums = new Set(rows.map((r) => panelNumberKey(r.panel_number)))
+  const missing = [...expectedNums].filter((n) => !actualNums.has(n))
+  const extra = [...actualNums].filter((n) => !expectedNums.has(n))
+  if (missing.length > 0 || extra.length > 0) {
+    throw new Error(
+      `${label} panel set mismatch: missing=[${missing.join(',')}] extra=[${extra.join(',')}]` +
+      ` (expected ${expectedNums.size} panels, got ${actualNums.size})`,
+    )
+  }
 }
 
 
@@ -178,7 +229,10 @@ function mergePanelsWithRules(params: {
   return finalPanels.map((panel, index) => {
     const rules = photographyRules.find((rule) => rule.panel_number === panel.panel_number)
     if (!rules) {
-      throw new Error(`Missing photography rule for panel_number=${String(panel.panel_number)} at index=${index}`)
+      throw new Error(
+        `Missing photography rule for panel_number=${String(panel.panel_number)} at index=${index}` +
+        ` (photography rules: ${photographyRules.length}, final panels: ${finalPanels.length})`,
+      )
     }
     const acting = actingDirections.find((item) => item.panel_number === panel.panel_number)
     if (!acting) {
@@ -219,6 +273,8 @@ function shouldRetryStepError(error: unknown, message: string, retryable: boolea
   if (lowerMessage.includes('ark responses 调用失败')) return false
   if (lowerMessage.includes('invalidparameter')) return false
   if (lowerMessage.includes('unknown field')) return false
+  // 截断重试必然再截断，必须快速失败并放大 maxOutputTokens
+  if (lowerMessage.includes('llm_output_truncated')) return false
   return lowerMessage.includes('unexpected token')
     || lowerMessage.includes('unexpected end of json input')
     || lowerMessage.includes('json format invalid')
@@ -233,6 +289,7 @@ async function runStepWithRetry<T>(
   action: string,
   maxOutputTokens: number,
   parse: (text: string) => T,
+  onStepParsed?: ScriptToStoryboardOrchestratorInput['onStepParsed'],
 ): Promise<{ output: ScriptToStoryboardStepOutput; parsed: T }> {
   let lastError: Error | null = null
   for (let attempt = 1; attempt <= MAX_STEP_ATTEMPTS; attempt++) {
@@ -247,6 +304,9 @@ async function runStepWithRetry<T>(
     try {
       const output = await runStep(meta, prompt, action, maxOutputTokens)
       const parsed = parse(output.text)
+      if (onStepParsed) {
+        await onStepParsed({ stepKey: baseMeta.stepId, parsed })
+      }
       return { output, parsed }
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error))
@@ -285,7 +345,7 @@ async function runStepWithRetry<T>(
 export async function runScriptToStoryboardOrchestrator(
   input: ScriptToStoryboardOrchestratorInput,
 ): Promise<ScriptToStoryboardOrchestratorResult> {
-  const { clips, novelPromotionData, promptTemplates, runStep, concurrency: rawConcurrency } = input
+  const { clips, novelPromotionData, promptTemplates, runStep, onStepParsed, concurrency: rawConcurrency } = input
   if (!Array.isArray(clips) || clips.length === 0) {
     throw new Error('No clips found')
   }
@@ -371,7 +431,7 @@ export async function runScriptToStoryboardOrchestrator(
         },
       )
       const { parsed: planPanels } = await runStepWithRetry(
-        runStep, phase1Meta, phase1Prompt, 'storyboard_phase1_plan', 2600,
+        runStep, phase1Meta, phase1Prompt, 'storyboard_phase1_plan', PHASE1_MAX_OUTPUT_TOKENS,
         (text) => {
           const panels = parseJsonArray<StoryboardPanel>(text, `phase1:${formatClipId(clip)}`)
           if (panels.length === 0) {
@@ -379,6 +439,7 @@ export async function runScriptToStoryboardOrchestrator(
           }
           return panels
         },
+        onStepParsed,
       )
       phase1PanelsByClipId.set(clip.id, planPanels)
 
@@ -445,19 +506,31 @@ export async function runScriptToStoryboardOrchestrator(
         { parsed: actingDirections },
       ] = await Promise.all([
         runStepWithRetry(
-          runStep, phase2Meta, phase2Prompt, 'storyboard_phase2_cinematography', 2400,
-          (text) => parseJsonArray<PhotographyRule>(text, `phase2:${formatClipId(clip)}`),
+          runStep, phase2Meta, phase2Prompt, 'storyboard_phase2_cinematography', phase2MaxOutputTokens(planPanels.length),
+          (text) => {
+            const rules = parseJsonArray<PhotographyRule>(text, `phase2:${formatClipId(clip)}`)
+            assertRulePanelCoverage(rules, planPanels, `Phase2 cinematography for clip ${formatClipId(clip)}`)
+            return rules
+          },
+          onStepParsed,
         ),
         runStepWithRetry(
-          runStep, phase2ActingMeta, phase2ActingPrompt, 'storyboard_phase2_acting', 2400,
-          (text) => parseJsonArray<ActingDirection>(text, `phase2-acting:${formatClipId(clip)}`),
+          runStep, phase2ActingMeta, phase2ActingPrompt, 'storyboard_phase2_acting', phase2MaxOutputTokens(planPanels.length),
+          (text) => {
+            const directions = parseJsonArray<ActingDirection>(text, `phase2-acting:${formatClipId(clip)}`)
+            assertRulePanelCoverage(directions, planPanels, `Phase2 acting for clip ${formatClipId(clip)}`)
+            return directions
+          },
+          onStepParsed,
         ),
       ])
       const { parsed: filteredPhase3Panels } = await runStepWithRetry(
-        runStep, phase3Meta, phase3Prompt, 'storyboard_phase3_detail', 2600,
+        runStep, phase3Meta, phase3Prompt, 'storyboard_phase3_detail', phase3MaxOutputTokens(planPanels.length),
         (text) => {
-          const panels = parseJsonArray<StoryboardPanel>(text, `phase3:${formatClipId(clip)}`)
-          const filtered = panels.filter(
+          const overrides = parseJsonArray<StoryboardPanel>(text, `phase3:${formatClipId(clip)}`)
+          assertPanelNumberCoverage(overrides, planPanels, `Phase3 detail for clip ${formatClipId(clip)}`)
+          const merged = mergePhase3Overrides(planPanels, overrides)
+          const filtered = merged.filter(
             (panel) => panel.description && panel.description !== '无' && panel.location !== '无',
           )
           if (filtered.length === 0) {
@@ -465,6 +538,7 @@ export async function runScriptToStoryboardOrchestrator(
           }
           return filtered
         },
+        onStepParsed,
       )
 
       phase2CinematographyByClipId.set(clip.id, photographyRules)

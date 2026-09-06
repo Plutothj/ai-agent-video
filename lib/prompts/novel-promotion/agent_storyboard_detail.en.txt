@@ -11,46 +11,28 @@ Location info:
 {locations_description}
 
 Task:
-For each panel, output a complete panel object with improved cinematic detail.
-If any character already has `slot`, prefer preserving it exactly and use it as a preferred placement anchor.
+For each panel, output ONE incremental entry containing ONLY: panel_number, shot_type, camera_move, video_prompt.
+Do NOT repeat existing fields (description, characters, location, scene_type, source_text) — the system merges your entries into the original panels automatically.
+You must cover EVERY panel_number from the input, no missing, no extra, no duplicates.
+If any character already has `slot`, prefer using it as the placement anchor in video_prompt.
 Treat `slot` as one full placement phrase from the location context, not as a short token.
 
-Required fields per panel:
-- panel_number
-- description
-- characters
-- location
-- scene_type (daily/emotion/action/epic/suspense)
-- source_text
-- shot_type
-- camera_move
-- video_prompt
-- duration (optional)
-
-Output schema example (field names must be preserved):
+Output schema example (incremental entries only):
 [
   {
     "panel_number": 1,
-    "description": "panel description",
-    "characters": [{ "name": "Character", "appearance": "appearance", "slot": "the position beneath the throne steps at the center of the hall" }],
-    "location": "location name",
-    "scene_type": "daily",
-    "source_text": "source text excerpt",
     "shot_type": "medium shot",
-    "camera_move": "static",
-    "video_prompt": "motion-ready prompt",
-    "duration": 3
+    "camera_move": "slow push in",
+    "video_prompt": "motion-ready prompt with age+gender wording"
   }
 ]
 
 Rules:
-1. Keep panel order unchanged.
-2. Keep source_text semantically aligned with input; do not rewrite story meaning.
+1. One entry per panel; must cover all panel_number values exactly once.
+2. Only the four fields above are allowed in each entry; outputting any other field is forbidden.
 3. video_prompt should be motion-ready and concrete.
 4. Prefer age+gender wording in video_prompt when naming actors in camera directions.
-5. Preserve every input `slot` when the character is stably positioned, and reflect it as a preferred anchor in refined description/video_prompt.
-6. `slot` is not an absolute boundary. If the shot is clearly about movement, entry/exit, path traversal, transition space, temporary space, empty space, imagination, dream, memory, or abstract/non-literal space, you may remove `slot` or keep it without forcing a rigid static match.
-7. When no `slot` is used, decide placement freely from source text, action flow, spatial logic, and cinematic staging.
-8. Do not shorten, rewrite, summarize, or replace a provided `slot` phrase with a short token.
-9. Return JSON array only.
-10. ⚠️ JSON SAFETY: All quotation marks in text (""''「」 etc.) MUST be converted to corner brackets「」in JSON string values. NEVER use raw ASCII double quotes " inside string values.
+5. `slot` is a preferred anchor, not an absolute boundary. If the shot is clearly about movement, entry/exit, path traversal, transition space, temporary space, empty space, imagination, dream, memory, or abstract/non-literal space, you may ignore the static slot position and stage freely from story logic.
+6. Existing fields are preserved by the system; never output them.
+7. Return JSON array only.
+8. ⚠️ JSON SAFETY: All quotation marks in text (""''「」 etc.) MUST be converted to corner brackets「」in JSON string values. NEVER use raw ASCII double quotes " inside string values.

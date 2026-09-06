@@ -6,6 +6,8 @@ export interface ChatCompletionOptions {
     reasoning?: boolean
     reasoningEffort?: 'minimal' | 'low' | 'medium' | 'high'
     maxRetries?: number
+    // 单次补全的最大输出 token 数（映射到 openai-compat 的 max_tokens / responses 的 max_output_tokens）
+    maxOutputTokens?: number
     // 💰 计费相关
     projectId?: string   // 用于计费（如果不传，使用 'system' 作为默认值）
     action?: string      // 计费操作名称

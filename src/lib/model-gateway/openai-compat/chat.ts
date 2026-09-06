@@ -7,14 +7,27 @@ import { emitStreamChunk, emitStreamStage, resolveStreamStepMeta } from '@/lib/l
 import type { OpenAICompatChatRequest } from '../types'
 import { createOpenAICompatClient, resolveOpenAICompatClientConfig } from './common'
 
+function assertOpenAICompatNotTruncated(completion: OpenAI.Chat.Completions.ChatCompletion) {
+  const finishReason = completion.choices?.[0]?.finish_reason
+  if (finishReason === 'length') {
+    throw new Error(
+      'LLM_OUTPUT_TRUNCATED: 模型输出因 max_tokens 上限被截断（finish_reason=length），' +
+      '重试同样会截断，请提高该步骤的 maxOutputTokens 配置。',
+    )
+  }
+}
+
 export async function runOpenAICompatChatCompletion(input: OpenAICompatChatRequest): Promise<OpenAI.Chat.Completions.ChatCompletion> {
   const config = await resolveOpenAICompatClientConfig(input.userId, input.providerId)
   const client = createOpenAICompatClient(config)
-  return await client.chat.completions.create({
+  const completion = await client.chat.completions.create({
     model: input.modelId,
     messages: input.messages as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
     temperature: input.temperature,
+    ...(input.maxOutputTokens ? { max_tokens: input.maxOutputTokens } : {}),
   })
+  assertOpenAICompatNotTruncated(completion)
+  return completion
 }
 
 type OpenAIStreamWithFinal = AsyncIterable<unknown> & {
@@ -34,6 +47,7 @@ export async function runOpenAICompatChatCompletionStream(
     model: input.modelId,
     messages: input.messages as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
     temperature: input.temperature,
+    ...(input.maxOutputTokens ? { max_tokens: input.maxOutputTokens } : {}),
     stream: true,
   } as OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming)
 

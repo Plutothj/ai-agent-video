@@ -241,6 +241,64 @@ function parseJsonResponse<T extends JsonRecord>(responseText: string, clipId: s
     return normalized
 }
 
+function panelNumberKey(value: unknown): string {
+    if (value === undefined || value === null) return ''
+    if (typeof value === 'number' || typeof value === 'string') return String(value)
+    return ''
+}
+
+/**
+ * 校验 rows 覆盖了 expected 的全部面板编号（缺了就抛错走重试，避免等到 merge 阶段硬失败）。
+ */
+export function assertPanelNumberCoverage<T extends { panel_number?: unknown }>(
+    rows: T[],
+    expected: StoryboardPanel[],
+    label: string,
+    noun = 'entries',
+): void {
+    const expectedNums = new Set(expected.map((p) => panelNumberKey(p.panel_number)))
+    const actualNums = new Set(rows.map((r) => panelNumberKey(r.panel_number)))
+    const missing = [...expectedNums].filter((n) => !actualNums.has(n))
+    if (missing.length > 0) {
+        throw new Error(
+            `${label} panel coverage mismatch: missing ${noun} for panel_number=[${missing.join(',')}]` +
+            ` (expected ${expectedNums.size} panels, got ${actualNums.size} ${noun}, got numbers=[${[...actualNums].join(',')}])`,
+        )
+    }
+}
+
+/**
+ * 将 phase3 的增量输出（仅含 panel_number + 新增字段）合并回 phase1 的完整面板。
+ * 合并由代码完成，LLM 不再重复输出 description/characters/location/source_text 等原有字段，
+ * 以大幅减少输出 token 与截断风险。
+ */
+export function mergePhase3Overrides(
+    planPanels: StoryboardPanel[],
+    overrides: StoryboardPanel[],
+): StoryboardPanel[] {
+    const overrideMap = new Map<string, StoryboardPanel>()
+    for (const item of overrides) {
+        const key = panelNumberKey(item.panel_number)
+        if (key) overrideMap.set(key, item)
+    }
+    return planPanels.map((panel) => {
+        const override = overrideMap.get(panelNumberKey(panel.panel_number))
+        if (!override) return panel
+        const { panel_number: _panelNumber, ...rest } = override
+        void _panelNumber
+        return { ...panel, ...rest }
+    })
+}
+
+// phase1 输出为完整面板数组且面板数未知，上限放宽避免截断
+export const PHASE1_MAX_OUTPUT_TOKENS = 8000
+export function phase2MaxOutputTokens(panelCount: number): number {
+    return Math.max(2400, panelCount * 200)
+}
+export function phase3MaxOutputTokens(panelCount: number): number {
+    return Math.max(2600, panelCount * 160)
+}
+
 // ========== Phase 1: 基础分镜规划 ==========
 export async function executePhase1(
     clip: ClipAsset,
@@ -328,6 +386,7 @@ export async function executePhase1(
                 reasoning: true,
                 projectId,
                 action: 'storyboard_phase1_plan',
+                maxOutputTokens: PHASE1_MAX_OUTPUT_TOKENS,
                 meta: {
                     stepId: 'storyboard_phase1_plan',
                     stepTitle: '分镜规划',
@@ -445,6 +504,7 @@ export async function executePhase2(
                 reasoning: true,
                 projectId,
                 action: 'storyboard_phase2_cinematography',
+                maxOutputTokens: phase2MaxOutputTokens(planPanels.length),
                 meta: {
                     stepId: 'storyboard_phase2_cinematography',
                     stepTitle: '摄影规则',
@@ -531,6 +591,7 @@ export async function executePhase2Acting(
                 reasoning: true,
                 projectId,
                 action: 'storyboard_phase2_acting',
+                maxOutputTokens: phase2MaxOutputTokens(planPanels.length),
                 meta: {
                     stepId: 'storyboard_phase2_acting',
                     stepTitle: '演技指导',
@@ -638,6 +699,7 @@ export async function executePhase3(
                 reasoning: true,
                 projectId,
                 action: 'storyboard_phase3_detail',
+                maxOutputTokens: phase3MaxOutputTokens(planPanels.length),
                 meta: {
                     stepId: 'storyboard_phase3_detail',
                     stepTitle: '镜头细化',
@@ -651,7 +713,10 @@ export async function executePhase3(
                 throw new Error(`Phase 3: 无响应 clip ${clipId}`)
             }
 
-            finalPanels = parseJsonResponse<StoryboardPanel>(detailResponseText, clipId, 3)
+            // 模板只要求增量输出（panel_number + shot_type/camera_move/video_prompt），由代码合并回完整面板
+            const detailOverrides = parseJsonResponse<StoryboardPanel>(detailResponseText, clipId, 3)
+            assertPanelNumberCoverage(detailOverrides, planPanels, `Phase 3 clip ${clipId}`)
+            finalPanels = mergePhase3Overrides(planPanels, detailOverrides)
 
             // 记录第三阶段完整输出（过滤前）
             logAIAnalysis(session.user.id, session.user.name, projectId, projectName, {

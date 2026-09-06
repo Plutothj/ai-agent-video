@@ -59,6 +59,21 @@ type OpenAIStreamWithFinal = AsyncIterable<unknown> & {
   finalChatCompletion?: () => Promise<OpenAI.Chat.Completions.ChatCompletion>
 }
 
+/**
+ * 识别上游提供商"额度用尽"类错误（如腾讯云 TokenHub 401008 quota exhausted），
+ * 翻译为用户可读的中文提示，避免直接把 AI SDK 原始错误淹没到 LLM_EMPTY_RESPONSE 里。
+ */
+function detectProviderQuotaExhausted(streamErrorChunks: unknown[]): string | null {
+  for (const chunk of streamErrorChunks) {
+    const raw = JSON.stringify(chunk)
+    if (raw.includes('401008') || (raw.includes('quota') && (raw.includes('402') || raw.includes('403')))) {
+      return 'LLM_PROVIDER_QUOTA_EXHAUSTED: 当前 AI 提供商免费额度已用尽（错误码 401008）。' +
+        '请到对应控制台开通后付费，或在设置页更换其他模型后重试。'
+    }
+  }
+  return null
+}
+
 
 
 export async function chatCompletionStream(
@@ -126,6 +141,7 @@ export async function chatCompletionStream(
           modelId: resolvedModelId,
           messages,
           temperature,
+          maxOutputTokens: options.maxOutputTokens,
         })
         : await runOpenAICompatChatCompletion({
           userId,
@@ -133,6 +149,7 @@ export async function chatCompletionStream(
           modelId: resolvedModelId,
           messages,
           temperature,
+          maxOutputTokens: options.maxOutputTokens,
         })
       const completionParts = getCompletionParts(completion)
       let seq = 1
@@ -714,6 +731,10 @@ export async function chatCompletionStream(
               streamedReasoningLength: finalReasoning.length,
             },
           })
+          const quotaExhaustedMessage = detectProviderQuotaExhausted(streamErrorChunks)
+          if (quotaExhaustedMessage) {
+            throw new Error(quotaExhaustedMessage)
+          }
           const finishInfo = sdkFinishReason ?? streamFinishReason ?? 'unknown'
           const errDetail = streamErrorChunks.length > 0
             ? ` [apiError: ${JSON.stringify(streamErrorChunks[0])}]`

@@ -6,8 +6,16 @@ import type {
   ScriptToStoryboardStepMeta,
   ScriptToStoryboardStepOutput,
 } from '@/lib/novel-promotion/script-to-storyboard/orchestrator'
+import {
+  assertRulePanelCoverage,
+} from '@/lib/novel-promotion/script-to-storyboard/orchestrator'
 import { listArtifacts } from '@/lib/run-runtime/service'
 import {
+  assertPanelNumberCoverage,
+  mergePhase3Overrides,
+  PHASE1_MAX_OUTPUT_TOKENS,
+  phase2MaxOutputTokens,
+  phase3MaxOutputTokens,
   type ActingDirection,
   type CharacterAsset,
   type ClipCharacterRef,
@@ -254,6 +262,7 @@ async function runStepWithRetry<T>(params: {
   maxOutputTokens: number
   parse: (text: string) => T
   retryStepAttempt: number
+  onStepParsed?: (params: { stepKey: string, parsed: unknown }) => Promise<void>
 }) {
   let lastError: Error | null = null
   for (let attempt = 1; attempt <= MAX_STEP_ATTEMPTS; attempt += 1) {
@@ -265,6 +274,9 @@ async function runStepWithRetry<T>(params: {
     try {
       const output = await params.runStep(meta, params.prompt, params.action, params.maxOutputTokens)
       const parsed = params.parse(output.text)
+      if (params.onStepParsed) {
+        await params.onStepParsed({ stepKey: params.baseMeta.stepId, parsed })
+      }
       return parsed
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error))
@@ -288,7 +300,10 @@ function mergePanelsWithRules(params: {
   return finalPanels.map((panel, index) => {
     const rule = photographyRules.find((item) => item.panel_number === panel.panel_number)
     if (!rule) {
-      throw new Error(`Missing photography rule for panel_number=${String(panel.panel_number)} at index=${index}`)
+      throw new Error(
+        `Missing photography rule for panel_number=${String(panel.panel_number)} at index=${index}` +
+        ` (photography rules: ${photographyRules.length}, final panels: ${finalPanels.length})`,
+      )
     }
     const acting = actingDirections.find((item) => item.panel_number === panel.panel_number)
     if (!acting) {
@@ -345,6 +360,7 @@ export async function runScriptToStoryboardAtomicRetry(params: {
   }
   promptTemplates: ScriptToStoryboardPromptTemplates
   runStep: StepRunner
+  onStepParsed?: (params: { stepKey: string, parsed: unknown }) => Promise<void>
 }): Promise<ScriptToStoryboardAtomicRetryResult> {
   const clipCharacters = parseClipCharacters(params.clip.characters)
   const clipLocation = params.clip.location || null
@@ -439,7 +455,7 @@ export async function runScriptToStoryboardAtomicRetry(params: {
       baseMeta,
       prompt: phase1Prompt,
       action: 'storyboard_phase1_plan',
-      maxOutputTokens: 2600,
+      maxOutputTokens: PHASE1_MAX_OUTPUT_TOKENS,
       parse: (text) => {
         const panels = parseJsonArray<StoryboardPanel>(text, `phase1:${formatClipId(params.clip)}`)
         if (panels.length === 0) {
@@ -448,6 +464,7 @@ export async function runScriptToStoryboardAtomicRetry(params: {
         return panels
       },
       retryStepAttempt: params.retryStepAttempt,
+      onStepParsed: params.onStepParsed,
     })
     phase1PanelsByClipId[params.clip.id] = phase1Panels
   } else if (params.retryTarget.phase === 'phase2_cinematography') {
@@ -463,9 +480,14 @@ export async function runScriptToStoryboardAtomicRetry(params: {
       baseMeta,
       prompt: phase2Prompt,
       action: 'storyboard_phase2_cinematography',
-      maxOutputTokens: 2400,
-      parse: (text) => parseJsonArray<PhotographyRule>(text, `phase2:${formatClipId(params.clip)}`),
+      maxOutputTokens: phase2MaxOutputTokens(planPanels.length),
+      parse: (text) => {
+        const rules = parseJsonArray<PhotographyRule>(text, `phase2:${formatClipId(params.clip)}`)
+        assertRulePanelCoverage(rules, planPanels, `Phase2 cinematography for clip ${formatClipId(params.clip)}`)
+        return rules
+      },
       retryStepAttempt: params.retryStepAttempt,
+      onStepParsed: params.onStepParsed,
     })
     phase2CinematographyByClipId[params.clip.id] = phase2Cinematography
   } else if (params.retryTarget.phase === 'phase2_acting') {
@@ -479,9 +501,14 @@ export async function runScriptToStoryboardAtomicRetry(params: {
       baseMeta,
       prompt: phase2ActingPrompt,
       action: 'storyboard_phase2_acting',
-      maxOutputTokens: 2400,
-      parse: (text) => parseJsonArray<ActingDirection>(text, `phase2-acting:${formatClipId(params.clip)}`),
+      maxOutputTokens: phase2MaxOutputTokens(planPanels.length),
+      parse: (text) => {
+        const directions = parseJsonArray<ActingDirection>(text, `phase2-acting:${formatClipId(params.clip)}`)
+        assertRulePanelCoverage(directions, planPanels, `Phase2 acting for clip ${formatClipId(params.clip)}`)
+        return directions
+      },
       retryStepAttempt: params.retryStepAttempt,
+      onStepParsed: params.onStepParsed,
     })
     phase2ActingByClipId[params.clip.id] = phase2Acting
   } else {
@@ -496,10 +523,12 @@ export async function runScriptToStoryboardAtomicRetry(params: {
       baseMeta,
       prompt: phase3Prompt,
       action: 'storyboard_phase3_detail',
-      maxOutputTokens: 2600,
+      maxOutputTokens: phase3MaxOutputTokens(planPanels.length),
       parse: (text) => {
-        const parsed = parseJsonArray<StoryboardPanel>(text, `phase3:${formatClipId(params.clip)}`)
-        const filtered = parsed.filter(
+        const overrides = parseJsonArray<StoryboardPanel>(text, `phase3:${formatClipId(params.clip)}`)
+        assertPanelNumberCoverage(overrides, planPanels, `Phase3 detail for clip ${formatClipId(params.clip)}`)
+        const merged = mergePhase3Overrides(planPanels, overrides)
+        const filtered = merged.filter(
           (panel) => panel.description && panel.description !== '无' && panel.location !== '无',
         )
         if (filtered.length === 0) {
@@ -508,6 +537,7 @@ export async function runScriptToStoryboardAtomicRetry(params: {
         return filtered
       },
       retryStepAttempt: params.retryStepAttempt,
+      onStepParsed: params.onStepParsed,
     })
     phase3PanelsByClipId[params.clip.id] = phase3Panels
   }

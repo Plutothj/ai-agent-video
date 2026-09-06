@@ -42,4 +42,5 @@ export interface OpenAICompatChatRequest {
   modelId: string
   messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>
   temperature: number
+  maxOutputTokens?: number
 }

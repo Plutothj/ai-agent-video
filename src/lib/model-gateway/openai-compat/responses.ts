@@ -110,6 +110,7 @@ export async function runOpenAICompatResponsesCompletion(input: OpenAICompatChat
         content: [{ type: 'input_text', text: message.content }],
       })),
       temperature: input.temperature,
+      ...(input.maxOutputTokens ? { max_output_tokens: input.maxOutputTokens } : {}),
     }),
   })
 
@@ -123,6 +124,13 @@ export async function runOpenAICompatResponsesCompletion(input: OpenAICompatChat
   }
 
   const payload = await response.json() as unknown
+  const payloadStatus = (payload as { status?: unknown })?.status
+  if (payloadStatus === 'incomplete') {
+    throw new Error(
+      'LLM_OUTPUT_TRUNCATED: 模型输出因 max_output_tokens 上限被截断（status=incomplete），' +
+      '重试同样会截断，请提高该步骤的 maxOutputTokens 配置。',
+    )
+  }
   const text = extractResponsesText(payload)
   const reasoning = extractResponsesReasoning(payload)
   const usage = extractResponsesUsage(payload)
