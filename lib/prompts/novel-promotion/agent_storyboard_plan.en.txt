@@ -59,3 +59,5 @@ Planning rules:
 10. Do not shorten, rewrite, summarize, or replace a provided slot phrase with a short token such as `slot_1`, `left`, or `throne_front`.
 11. Return strict JSON only.
 12. ⚠️ JSON SAFETY: All quotation marks in text (""''「」 etc.) MUST be converted to corner brackets「」in JSON string values. NEVER use raw ASCII double quotes " inside string values.
+13. Pacing target: roughly 40-60 characters of source text per shot (about 8-12 shots per 450 characters). Merge continuous actions and ordinary dialogue into single shots; only key turning points deserve a separate shot.
+14. Dialogue: the speaker must get their own shot focused on their face (lip-sync requirement); add a listener-reaction shot only at key emotional beats.

@@ -33,6 +33,11 @@ import {
   buildPromptAssetContext,
   compileAssetPromptFragments,
 } from '@/lib/assets/services/asset-prompt-context'
+import {
+  buildPrevChunkContextBlock,
+  serializePrevPanelsWithRules,
+  slicePrevItems,
+} from '@/lib/novel-promotion/script-to-storyboard/prev-chunk-context'
 
 type StoryboardClipInput = {
   id: string
@@ -365,11 +370,12 @@ export async function runScriptToStoryboardAtomicRetry(params: {
   const clipCharacters = parseClipCharacters(params.clip.characters)
   const clipLocation = params.clip.location || null
   const clipProps = parseClipProps(params.clip.props ?? null)
+  const locale = params.locale ?? 'zh'
   const filteredFullDescription = getFilteredFullDescription(params.novelPromotionData.characters || [], clipCharacters)
   const filteredLocationsDescription = getFilteredLocationsDescription(
     params.novelPromotionData.locations || [],
     clipLocation,
-    params.locale ?? 'zh',
+    locale,
   )
   const filteredPropsDescription = compileAssetPromptFragments(buildPromptAssetContext({
     characters: [],
@@ -486,7 +492,8 @@ export async function runScriptToStoryboardAtomicRetry(params: {
   const metaFor = (phase: StoryboardRetryPhase) =>
     buildStepMeta({ target: targetFor(phase), clipIndex: params.clipIndex, totalClipCount: params.totalClipCount })
 
-  // 分块执行器：与主流程一致，面板过多时单次请求容易在尾部截断/漏格
+  // 分块执行器：与主流程一致，面板过多时单次请求容易在尾部截断/漏格。
+  // buildPrevContext（可选）为分块请求附带紧邻前文的产物，修复跨块衔接/轴线/光线断裂。
   const runChunkedPhase = async <T extends { panel_number?: unknown }>(
     meta: ScriptToStoryboardStepMeta,
     templateFilled: string,
@@ -494,12 +501,17 @@ export async function runScriptToStoryboardAtomicRetry(params: {
     action: string,
     label: string,
     parseChunk: (text: string, chunkPanels: StoryboardPanel[]) => T[],
+    buildPrevContext?: (prevPanels: StoryboardPanel[], prevResults: T[]) => string,
   ): Promise<T[]> => {
     const results: T[] = []
+    let chunkStart = 0
     for (const chunk of chunkByPanelCount(panels)) {
+      const prevContext = buildPrevContext
+        ? buildPrevContext(slicePrevItems(panels, chunkStart), results)
+        : ''
       const chunkPrompt = templateFilled
         .replace('{panels_json}', JSON.stringify(chunk, null, 2))
-        .replace(/\{panel_count\}/g, String(chunk.length))
+        .replace(/\{panel_count\}/g, String(chunk.length)) + prevContext
       const parsed = await runStepWithRetry({
         runStep: params.runStep,
         baseMeta: meta,
@@ -510,6 +522,7 @@ export async function runScriptToStoryboardAtomicRetry(params: {
         retryStepAttempt: params.retryStepAttempt,
       })
       results.push(...parsed)
+      chunkStart += chunk.length
     }
     assertPanelNumberCoverage(results, panels, label)
     return results
@@ -528,6 +541,13 @@ export async function runScriptToStoryboardAtomicRetry(params: {
         assertRulePanelCoverage(rules, chunkPanels, `Phase2 cinematography for clip ${formatClipId(params.clip)}`)
         return rules
       },
+      // 摄影块串行执行，prevRules 与 chunkStart 对齐：把前块的 screen_position 传给后块，保持轴线一致
+      (prevPanels, prevRules) => prevRules.length > 0
+        ? buildPrevChunkContextBlock(locale, {
+            zh: '前文分镜的摄影规则（screen_position/朝向必须与之一致，禁止越轴）',
+            en: 'photography rules of the previous shots (screen positions / axis must stay consistent)',
+          }, JSON.stringify(prevRules, null, 2))
+        : '',
     )
     phase2CinematographyByClipId[params.clip.id] = phase2Cinematography
     params.onStepParsed?.({ stepKey: targetFor('phase2_cinematography').stepKey, parsed: phase2Cinematography })
@@ -544,6 +564,12 @@ export async function runScriptToStoryboardAtomicRetry(params: {
         assertRulePanelCoverage(directions, chunkPanels, `Phase2 acting for clip ${formatClipId(params.clip)}`)
         return directions
       },
+      (prevPanels, prevDirections) => prevDirections.length > 0
+        ? buildPrevChunkContextBlock(locale, {
+            zh: '前文分镜的表演方向',
+            en: 'acting directions of the previous shots',
+          }, JSON.stringify(prevDirections, null, 2))
+        : '',
     )
     phase2ActingByClipId[params.clip.id] = phase2Acting
     params.onStepParsed?.({ stepKey: targetFor('phase2_acting').stepKey, parsed: phase2Acting })
@@ -569,6 +595,17 @@ export async function runScriptToStoryboardAtomicRetry(params: {
         }
         return filtered
       },
+      // phase3 的 results 有过滤不与 chunkStart 对齐，前文只用 prevPanels（与完整摄影/表演规则软合并）
+      (prevPanels) => prevPanels.length > 0
+        ? buildPrevChunkContextBlock(locale, {
+            zh: '紧邻本组之前的已规划分镜（已合并摄影与表演信息）',
+            en: 'the immediately preceding planned shots (with photography and acting merged)',
+          }, serializePrevPanelsWithRules({
+            prevPanels,
+            photographyRules: phase2Cinematography,
+            actingDirections: phase2Acting,
+          }))
+        : '',
     )
     phase3PanelsByClipId[params.clip.id] = phase3Panels
     params.onStepParsed?.({ stepKey: targetFor('phase3_detail').stepKey, parsed: phase3Panels })

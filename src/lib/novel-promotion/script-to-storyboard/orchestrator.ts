@@ -26,6 +26,11 @@ import {
   compileAssetPromptFragments,
 } from '@/lib/assets/services/asset-prompt-context'
 import {
+  buildPrevChunkContextBlock,
+  serializePrevPanelsWithRules,
+  slicePrevItems,
+} from '@/lib/novel-promotion/script-to-storyboard/prev-chunk-context'
+import {
   DEFAULT_ANALYSIS_WORKFLOW_CONCURRENCY,
   normalizeWorkflowConcurrencyValue,
 } from '@/lib/workflow-concurrency'
@@ -368,6 +373,7 @@ export async function runScriptToStoryboardOrchestrator(
     clips,
     concurrency,
     async (clip, index): Promise<ClipStoryboardPanels> => {
+      const locale = input.locale ?? 'zh'
       const clipIndex = index + 1
       const clipContent = typeof clip.content === 'string' ? clip.content.trim() : ''
       if (!clipContent) {
@@ -381,7 +387,7 @@ export async function runScriptToStoryboardOrchestrator(
       const filteredLocationsDescription = getFilteredLocationsDescription(
         novelPromotionData.locations || [],
         clipLocation,
-        input.locale ?? 'zh',
+        locale,
       )
       const filteredPropsDescription = compileAssetPromptFragments(buildPromptAssetContext({
         characters: [],
@@ -497,7 +503,9 @@ export async function runScriptToStoryboardOrchestrator(
         .replace('{props_description}', filteredPropsDescription)
 
       // 单次请求只处理一个面板分块：面板过多时思考+长 JSON 输出容易在尾部截断/漏格，
-      // 分块后每次输出体积可控，覆盖校验按块执行，块内失败只重试该块
+      // 分块后每次输出体积可控，覆盖校验按块执行，块内失败只重试该块。
+      // buildPrevContext（可选）为分块请求附带紧邻前文的产物（上一块末镜/前文规则），
+      // 修复分块导致的跨块衔接、轴线、光线断裂。
       const runChunkedPhase = async <T extends { panel_number?: unknown }>(
         meta: ScriptToStoryboardStepMeta,
         templateFilled: string,
@@ -505,18 +513,24 @@ export async function runScriptToStoryboardOrchestrator(
         action: string,
         label: string,
         parseChunk: (text: string, chunkPanels: StoryboardPanel[]) => T[],
+        buildPrevContext?: (prevPanels: StoryboardPanel[], prevResults: T[]) => string,
       ): Promise<T[]> => {
         const results: T[] = []
+        let chunkStart = 0
         for (const chunk of chunkByPanelCount(panels)) {
+          const prevContext = buildPrevContext
+            ? buildPrevContext(slicePrevItems(panels, chunkStart), results)
+            : ''
           const chunkPrompt = templateFilled
             .replace('{panels_json}', JSON.stringify(chunk, null, 2))
-            .replace(/\{panel_count\}/g, String(chunk.length))
+            .replace(/\{panel_count\}/g, String(chunk.length)) + prevContext
           const { parsed } = await runStepWithRetry(
             runStep, meta, chunkPrompt, action, PHASE_STEP_MAX_OUTPUT_TOKENS,
             (text) => parseChunk(text, chunk),
             undefined,
           )
           results.push(...parsed)
+          chunkStart += chunk.length
         }
         assertPanelNumberCoverage(results, panels, label)
         return results
@@ -531,6 +545,13 @@ export async function runScriptToStoryboardOrchestrator(
             assertRulePanelCoverage(rules, chunkPanels, `Phase2 cinematography for clip ${formatClipId(clip)}`)
             return rules
           },
+          // 摄影块串行执行，prevRules 与 chunkStart 对齐：把前块的 screen_position 传给后块，保持轴线一致
+          (prevPanels, prevRules) => prevRules.length > 0
+            ? buildPrevChunkContextBlock(locale, {
+                zh: '前文分镜的摄影规则（screen_position/朝向必须与之一致，禁止越轴）',
+                en: 'photography rules of the previous shots (screen positions / axis must stay consistent)',
+              }, JSON.stringify(prevRules, null, 2))
+            : '',
         ),
         runChunkedPhase(
           phase2ActingMeta, phase2ActingTemplateFilled, planPanels, 'storyboard_phase2_acting',
@@ -540,6 +561,12 @@ export async function runScriptToStoryboardOrchestrator(
             assertRulePanelCoverage(directions, chunkPanels, `Phase2 acting for clip ${formatClipId(clip)}`)
             return directions
           },
+          (prevPanels, prevDirections) => prevDirections.length > 0
+            ? buildPrevChunkContextBlock(locale, {
+                zh: '前文分镜的表演方向',
+                en: 'acting directions of the previous shots',
+              }, JSON.stringify(prevDirections, null, 2))
+            : '',
         ),
       ])
       onStepParsed?.({ stepKey: phase2Meta.stepId, parsed: photographyRules })
@@ -560,6 +587,17 @@ export async function runScriptToStoryboardOrchestrator(
           }
           return filtered
         },
+        // phase3 的 results 有过滤不与 chunkStart 对齐，前文只用 prevPanels（与完整摄影/表演规则软合并）
+        (prevPanels) => prevPanels.length > 0
+          ? buildPrevChunkContextBlock(locale, {
+              zh: '紧邻本组之前的已规划分镜（已合并摄影与表演信息）',
+              en: 'the immediately preceding planned shots (with photography and acting merged)',
+            }, serializePrevPanelsWithRules({
+              prevPanels,
+              photographyRules,
+              actingDirections,
+            }))
+          : '',
       )
       onStepParsed?.({ stepKey: phase3Meta.stepId, parsed: filteredPhase3Panels })
 

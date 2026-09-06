@@ -148,7 +148,7 @@ describe('script-to-storyboard atomic retry', () => {
     expect(result.totalPanelCount).toBe(1)
   })
 
-  it('phase2 重试缺少 phase3 artifact 时显式失败', async () => {
+  it('phase2 重试缺失 phase2/phase3 artifact 时按断点续跑补齐', async () => {
     listArtifactsMock.mockImplementation(async (params: {
       runId: string
       artifactType?: string
@@ -183,16 +183,22 @@ describe('script-to-storyboard atomic retry', () => {
     })
 
     const runStep = vi.fn(async (_meta, _prompt, action: string) => {
-      if (action !== 'storyboard_phase2_cinematography') {
-        throw new Error(`unexpected action ${action}`)
+      if (action === 'storyboard_phase2_cinematography') {
+        return {
+          text: JSON.stringify([{ panel_number: 1, composition: '居中' }]),
+          reasoning: '',
+        }
       }
-      return {
-        text: JSON.stringify([{ panel_number: 1, composition: '居中' }]),
-        reasoning: '',
+      if (action === 'storyboard_phase3_detail') {
+        return {
+          text: JSON.stringify([{ panel_number: 1, description: 'phase3-new', location: 'Office', source_text: 'src', characters: [] }]),
+          reasoning: '',
+        }
       }
+      throw new Error(`unexpected action ${action}`)
     })
 
-    await expect(runScriptToStoryboardAtomicRetry({
+    const result = await runScriptToStoryboardAtomicRetry({
       runId: 'run-2',
       retryTarget: {
         stepKey: 'clip_clip-1_phase2_cinematography',
@@ -220,6 +226,18 @@ describe('script-to-storyboard atomic retry', () => {
         phase3DetailTemplate: '{panels_json} {characters_age_gender} {locations_description}',
       },
       runStep,
-    })).rejects.toThrow('missing dependency artifact: storyboard.clip.phase3')
+    })
+
+    expect(runStep).toHaveBeenCalledTimes(2)
+    expect(runStep.mock.calls[0]?.[2]).toBe('storyboard_phase2_cinematography')
+    expect(runStep.mock.calls[1]?.[2]).toBe('storyboard_phase3_detail')
+    expect(result.phase2CinematographyByClipId['clip-1']).toEqual([{ panel_number: 1, composition: '居中' }])
+    expect(result.phase3PanelsByClipId['clip-1']).toEqual([
+      { panel_number: 1, description: 'phase3-new', location: 'Office', source_text: 'src', characters: [] },
+    ])
+    expect(result.clipPanels[0]?.finalPanels[0]).toEqual(expect.objectContaining({
+      panel_number: 1,
+      description: 'phase3-new',
+    }))
   })
 })
