@@ -16,7 +16,7 @@ import { BaseImageGenerator, BaseVideoGenerator } from './base'
 import type { GenerateResult, ImageGenerateParams, VideoGenerateParams } from './base'
 import { getProviderConfig } from '@/lib/api-config'
 import { callTencentVod, resolveTencentCloudCredentials } from '@/lib/tencent-cloud/client'
-import { generateUniqueKey, getSignedUrl, uploadObject } from '@/lib/storage'
+import { generateUniqueKey, getSignedUrl, getObjectBuffer, uploadObject } from '@/lib/storage'
 import { resolveStorageKeyFromMediaValue } from '@/lib/media/service'
 
 // ==================== 模型规格（与 drama 生产库 ai_model / ai_video_model 对齐） ====================
@@ -210,7 +210,7 @@ async function resolveTencentResourceUrl(input: string): Promise<string> {
         return value
     }
     if (value.startsWith('data:')) {
-        // data URL → 转存对象存储，生成签名 URL（腾讯云服务器需要公网可访问）
+        // data URL → 转存对象存储，生成公网可访问 URL（腾讯云服务器需要公网可达）
         const commaIndex = value.indexOf(',')
         const header = value.slice(0, commaIndex)
         const base64 = value.slice(commaIndex + 1)
@@ -225,14 +225,54 @@ async function resolveTencentResourceUrl(input: string): Promise<string> {
                     : 'png'
         const buffer = Buffer.from(base64, 'base64')
         const key = await uploadObject(buffer, generateUniqueKey('tmp/tencent-vod', ext))
-        return getSignedUrl(key, 7200)
+        return requirePublicObjectUrl(key, 'data-url 参考资源')
     }
 
     const storageKey = await resolveStorageKeyFromMediaValue(value)
     if (storageKey) {
-        return getSignedUrl(storageKey, 7200)
+        return requirePublicObjectUrl(storageKey, '参考资源')
     }
     throw new Error(`TENCENT_RESOURCE_URL_UNRESOLVABLE: ${value.slice(0, 120)}`)
+}
+
+/**
+ * 腾讯云 AIGC 只能从公网拉取资源（FileInfos 不支持 base64），对象必须能给出绝对公网 URL。
+ * getSignedUrl 在配置了 TOS_PUBLIC_BASE_URL 时返回公网直链，否则返回给浏览器用的相对签名路由
+ * （/api/storage/sign?...）——相对路径传给腾讯会报 "imageUrl is invalid (too short)"。
+ * 公网直链 404 通常是旧数据仍存于无公网域名的存储（如本地 MinIO），尝试转存后重取，仍不可达则给出可行动的错误。
+ */
+async function requirePublicObjectUrl(storageKey: string, label: string): Promise<string> {
+    const candidate = getSignedUrl(storageKey, 7200)
+    if (!/^https?:\/\//.test(candidate)) {
+        throw new Error(
+            `TENCENT_RESOURCE_NOT_PUBLIC: ${label}所在存储未配置公网访问域名，腾讯云无法拉取 ` +
+            `${candidate.slice(0, 80)}。请配置 TOS_PUBLIC_BASE_URL 指向可公网访问的对象存储域名。`,
+        )
+    }
+    try {
+        const head = await fetch(candidate, { method: 'HEAD' })
+        if (head.ok) return candidate
+    } catch {
+        // 直链探测网络异常时保守放行，让腾讯侧暴露真实可达性
+        return candidate
+    }
+    // 公网直链 404：对象不在当前存储（典型：旧数据存于本地 MinIO 后存储已切换）→ 转存一份再取直链
+    try {
+        const buffer = await getObjectBuffer(storageKey)
+        const ext = (storageKey.split('.').pop() || 'png').toLowerCase()
+        const republishedKey = await uploadObject(buffer, generateUniqueKey('outbound/tencent-vod', ext))
+        const republished = getSignedUrl(republishedKey, 7200)
+        if (/^https?:\/\//.test(republished)) {
+            _ulogInfo(`[Tencent VOD] 参考资源不在公网存储，已转存 ${storageKey.slice(0, 60)} -> ${republishedKey.slice(0, 60)}`)
+            return republished
+        }
+    } catch {
+        // fallthrough：转存失败走下面的可行动错误
+    }
+    throw new Error(
+        `TENCENT_RESOURCE_NOT_PUBLIC: ${label}（${storageKey.slice(0, 80)}）公网直链 404 且无法转存。` +
+        `该图片可能仍存于旧存储（本地 MinIO），请在工作区重新生成该角色/场景图片后再试。`,
+    )
 }
 
 function buildVideoFileInfos(urls: string[]): Array<{ Type: 'Url'; Url: string; Category: 'Image'; Usage: 'Reference' }> {
