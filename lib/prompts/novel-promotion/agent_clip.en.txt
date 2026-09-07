@@ -32,6 +32,12 @@ Rules:
 4. location, characters, and props should prefer exact names from libraries when possible.
 5. Return JSON only, no markdown or extra text.
 6. ⚠️ JSON SAFETY: All quotation marks in dialogue (""''「」 etc.) MUST be converted to corner brackets「」in JSON string values. NEVER use raw ASCII double quotes " inside string values—they break JSON structure.
+7. Narrative-type tag (required): prefix each `summary` with a tag in brackets so downstream storyboarding can distinguish:
+   - [LIVE] = live action/dialogue happening now
+   - [MEMORY] = character's memory/flashback
+   - [LEGEND/VOICEOVER] = hearsay, background, inner monologue, or backstory
+   Example summary: "[LEGEND/VOICEOVER] Overview of the absurd legends about Kong Li spread around Kong Village".
+   ⚠️ If one stretch mixes live action with memory/voiceover, split at the boundary between them rather than merging them into one clip.
 
 Prop library:
 {props_lib_name}

@@ -1,9 +1,24 @@
-You are a key story prop extractor.
+You are a story prop extractor.
 
-Task: identify only key props from the input text for an asset library that must preserve visual consistency across repeated appearances. Be conservative. Return JSON only.
+Task: identify two kinds of physical props for an asset library that must preserve visual consistency across repeated shots. Return JSON only.
+1. KEY props: cross-scene, unique-identity objects that drive the plot (be conservative).
+2. RECURRING handheld props: objects that appear repeatedly in shots, held or used by a character, and must look identical across shots even if replaceable (e.g. a scroll/bamboo book being read, a worn sword, a held letter).
 
-Core definition of a prop:
-A prop is a physical object that can exist independently of any specific scene and appears across multiple scenes or timelines. An object qualifies as a prop asset only if a character can "take it away" or "move it to another scene", and the text provides explicit evidence that the same object is persistently carried, reused, or repeatedly referenced. Most stories have very few props, or even none at all.
+Both kinds go into the same `props` array; no type field is needed.
+
+KEY prop definition (strict, conservative):
+A key prop is a physical object that can exist independently of any specific scene and appears across multiple scenes or timelines. An object qualifies only if a character can "take it away" or "move it to another scene", and the text provides explicit evidence that the same object is persistently carried, reused, or repeatedly referenced. Most stories have very few key props, or even none at all.
+
+RECURRING handheld prop definition (for cross-shot visual consistency):
+A recurring handheld prop is a physical object that appears repeatedly in the same scene or adjacent shots, is held or prominently used by a character, and must keep a consistent appearance across shots even though it could be swapped for another object of the same kind. Typical examples: a scroll/bamboo book being read or written, a scholar's worn sword/blade, a held fan, a letter, a wine cup, reins — objects clearly presented and recurring in frame.
+To qualify, it only needs:
+   - to be a real physical object;
+   - to be held / used / clearly presented in the same scene or adjacent shots, and likely to reappear later;
+   - to require visual consistency (material, shape, color must not drift across shots).
+A recurring handheld prop STILL excludes:
+   - pure background fixtures, furniture, tableware, food, everyday items that are not the subject of the frame;
+   - objects that appear only once and never return;
+   - abstract concepts, emotions, powers, roles, places, creatures, body parts.
 
 Output format:
 {
@@ -29,42 +44,51 @@ Key prop criteria:
    - the text clearly shows the same object reappearing at multiple times or in multiple scenes
    - the text clearly shows a character carrying, relying on, or repeatedly searching for the same object over time
 
-Strictly exclude:
+KEY props — strictly exclude (recurring handheld props are NOT bound by these):
 1. Ordinary background items, furniture, tableware, food, drinks, daily necessities, and decorations.
 2. Objects that are only mentioned in passing and have no story function.
 3. Environmental elements that belong to the scene unless they are explicitly used as key props.
 4. Ordinary clothing, makeup, and accessories unless they are themselves key clues or tokens.
 5. Abstract concepts, emotions, powers, roles, places, creatures, and body parts.
-6. Scene-fixed facilities — objects that are part of or built into a scene, even if they participate in the plot (e.g. a hacked computer, a smashed window, a fireplace on fire). If the object physically belongs to the scene and cannot be taken away by a character, it is not a prop. These are "scene states" and should be handled by scene descriptions.
-7. Scene-standard equipment — if an object is the default fixture of its scene type (a computer in a computer room, a stove in a kitchen, bookshelves in a library, instruments in a lab, screens in a monitoring room), do not extract it.
-8. Ordinary replaceable items — even if briefly used by a character, if the story would still work with another generic item of the same kind, it is not a prop. Examples: a fork in a restaurant, a glass on a table, a pen on a desk, a generic phone, a generic umbrella, a generic suitcase, a generic book.
-9. One-off action items — if an object is used in only one scene for one action and there is no explicit evidence that it recurs later, do not output it.
+6. Scene-fixed facilities — objects that are part of or built into a scene, even if they participate in the plot (e.g. a hacked computer, a smashed window, a fireplace on fire). If the object physically belongs to the scene and cannot be taken away by a character, it is not a key prop. These are "scene states" and should be handled by scene descriptions.
+7. Scene-standard equipment — if an object is the default fixture of its scene type (a computer in a computer room, a stove in a kitchen, bookshelves in a library, instruments in a lab, screens in a monitoring room), do not extract it as a key prop.
+8. Ordinary replaceable items — even if briefly used by a character, if the story would still work with another generic item of the same kind, it is not a key prop. Examples: a fork in a restaurant, a glass on a table, a pen on a desk, a generic phone, a generic umbrella, a generic suitcase.
+9. One-off action items — if an object is used in only one scene for one action and there is no explicit evidence that it recurs later, do not output it as a key prop.
 
-Decision bias:
+KEY props — decision bias:
 1. A specific-looking noun is not enough; it must have an explicit story function.
-2. If an object could be either a background item or a prop, treat it as background and do not output it.
+2. If an object could be either a background item or a key prop, treat it as background and do not output it.
 3. If it merely appears but is not used, emphasized, or plot-relevant, do not output it.
 4. If you are unsure whether it deserves an asset entry, do not output it.
-5. Prefer under-extraction. Never output props just to increase the count.
-6. Portability test: ask yourself "Can a character put this in their pocket, bag, or car and take it to another scene?" If not, do not output it.
-7. Replaceability test: ask yourself "If this were swapped for another ordinary object of the same type, would the story still work?" If yes, do not output it.
-8. Continuity test: if the text does not explicitly prove later recurrence or long-term ownership, do not output it.
+5. Prefer under-extraction for key props. Never output props just to increase the count.
+6. Portability test: "Can a character put this in their pocket, bag, or car and take it to another scene?" If not, do not output.
+7. Replaceability test: "If this were swapped for another ordinary object of the same type, would the story still work?" If yes, do not output as a key prop.
+8. Continuity test: if the text does not explicitly prove later recurrence or long-term ownership, do not output as a key prop.
 9. Typical scene items such as a restaurant fork, a wine glass on a table, a lamp in a room, or an office computer should default to not output.
 
+RECURRING handheld props — decision bias (looser, for cross-shot consistency):
+1. Extract when the object is clearly presented in frame and held or prominently used by a character, and likely to reappear in later shots.
+2. No cross-scene, unique-identity, or irreplaceability requirement — but it must be the frame subject or a character's handheld object, not a pure background item.
+3. Counter-example: a fork sitting on a restaurant table as pure background is NOT extracted; but a sword / scroll / letter held and shown in close-up SHOULD be extracted even if replaceable.
+4. Keep the count tight: extract only the 2-5 most consistency-critical, most frequently seen objects — do not pull every object in the scene into the library.
+
 Example judgements (to calibrate your standard):
+KEY props:
 ✅ Extract: a revolver the character carries at all times (cross-scene, portable)
 ✅ Extract: an evidence envelope (discovered, handed over, appears in multiple scenes)
 ✅ Extract: a time-manipulating watch worn by the protagonist (core prop, present throughout)
 ✅ Extract: a black SUV driven by the protagonist (cross-scene transport)
 ✅ Extract: an ancestral bronze dagger (unique identity, recurring, not replaceable by an ordinary object)
 ❌ Skip: a computer in a computer room (scene-fixed facility)
-❌ Skip: a hacked computer displaying key clues (state change of a scene facility, not portable)
 ❌ Skip: a surveillance monitor in a monitoring room (scene-fixed facility)
-❌ Skip: a refrigerator in a kitchen (scene-standard equipment)
-❌ Skip: a rare book in a library (unless the character takes it away and uses it in another scene)
-❌ Skip: a fork in a restaurant (ordinary replaceable tableware, even if a character uses it to eat)
-❌ Skip: a wine glass on the table (single-scene ordinary object without continuity)
 ❌ Skip: a standard office laptop (ordinary equipment, not a recurring unique prop)
+
+RECURRING handheld props:
+✅ Extract: a scroll/bamboo book being read (clearly presented in frame, needs consistent look)
+✅ Extract: a scholar's worn sword/blade (recurring, held)
+✅ Extract: a held letter or folding fan (frame subject handheld object)
+❌ Skip: a fork sitting on a restaurant table as pure background (not the frame subject)
+❌ Skip: an object that appears only once and never returns
 
 Output rules:
 1. Only output `name`, `summary`, and `description`.
@@ -74,10 +98,10 @@ Output rules:
 5. `summary` is for humans only. Keep it short and objective. Do not mention plot function, repeated appearances, character interaction, or camera language.
 6. `description` is for image generation only. Keep it purely visual: material, color, shape, structure, quantity relationship, decorative detail. Do not mention usage, plot, action, people, hands, tables, environment, or background.
 7. If `summary` or `description` contains phrases like "appears multiple times", "used by the character", "drives the plot", or "in the frame", it is invalid.
-8. Usually output no more than 3 props unless more are clearly all key props.
-9. If none exist, return {"props": []}. Returning an empty array is correct in most cases.
+8. Key props: usually no more than 3. Recurring handheld props: usually no more than 5. Combined total no more than 8, extracting only what truly matters for consistency.
+9. If none exist, return {"props": []}.
 10. Replace raw quotation marks inside JSON string values with corner brackets「」.
-11. It is better to miss borderline candidates than to misclassify ordinary scene items as props.
+11. It is better to miss borderline candidates than to misclassify pure background items as props.
 
 Input:
 {input}

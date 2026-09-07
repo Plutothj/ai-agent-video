@@ -39,6 +39,52 @@ export function toPositiveInt(value: unknown): number | null {
   return n >= 0 ? n : null
 }
 
+/**
+ * 台词字数 → 单镜时长重算。
+ *
+ * 背景：panel.duration 由 Phase 3 LLM 拍脑袋给定，而 source_text（台词，用于配音/唇形同步）
+ * 又是独立生成的，两者没有绑定。LLM 常忽略「台词要短」的约束，产出 40~100+ 字台词却只给 4~5s，
+ * 导致唇形同步把长音频硬塞进短视频，时长不够、嘴型对不上。
+ *
+ * 这里在持久化时按台词字数刚性重算时长，保证「画面时长 >= 配音所需时长」：
+ *   duration = clamp(max(LLM 给定值, ceil(台词字数 / 语速)), 最低下限, 上限)
+ *
+ * 语速取 4 字/秒（文言文/口语含标点停顿的保守值，为口型与呼吸留余量）；
+ * 最低下限 4s 对齐视频模型最短档位（Wan/Kling 等 minDuration=2，但 4s 更接近分镜规划基准）；
+ * 上限 15s 对齐腾讯 VOD 主流模型（Kling/VS 系列）的最大时长，避免超长台词算出模型不支持的时长。
+ * 台词超过 15s 属极端长镜，应由台词截短约束处理，这里先封顶防止 lip-sync/视频生成崩坏。
+ */
+export const SPEECH_CHARS_PER_SECOND = 4
+export const MIN_PANEL_DURATION_SECONDS = 4
+export const MAX_PANEL_DURATION_SECONDS = 15
+
+/** 统计台词有效字数：仅计中文字符与字母数字，忽略标点、空白、空格、引号、省略号等。 */
+export function countSpeechChars(text: string | null | undefined): number {
+  if (!text) return 0
+  // 匹配中日韩字符 + 拉丁字母 + 数字；剔除标点、空白、括号、引号、省略号等非发音字符
+  const matches = text.match(/[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7afA-Za-z0-9]/g)
+  return matches ? matches.length : 0
+}
+
+export function computePanelDurationBySpeech(
+  sourceText: string | null | undefined,
+  llmDuration: number | null | undefined,
+): number {
+  const speechChars = countSpeechChars(sourceText)
+  if (speechChars === 0) {
+    // 无台词镜头：保留 LLM 给定值，无给定则回落到最低下限
+    return typeof llmDuration === 'number' && Number.isFinite(llmDuration) && llmDuration > 0
+      ? Math.min(Math.round(llmDuration), MAX_PANEL_DURATION_SECONDS)
+      : MIN_PANEL_DURATION_SECONDS
+  }
+  const speechSeconds = Math.ceil(speechChars / SPEECH_CHARS_PER_SECOND)
+  const base = typeof llmDuration === 'number' && Number.isFinite(llmDuration) && llmDuration > 0
+    ? Math.round(llmDuration)
+    : MIN_PANEL_DURATION_SECONDS
+  const duration = Math.max(base, speechSeconds, MIN_PANEL_DURATION_SECONDS)
+  return Math.min(duration, MAX_PANEL_DURATION_SECONDS)
+}
+
 function parsePanelCharacters(raw: string | null): string[] {
   if (!raw) return []
   try {
@@ -198,7 +244,7 @@ export async function persistStoryboardsAndPanels(params: {
             srtSegment: panel.source_text || null,
             photographyRules: panel.photographyPlan ? JSON.stringify(panel.photographyPlan) : null,
             actingNotes: panel.actingNotes ? JSON.stringify(panel.actingNotes) : null,
-            duration: panel.duration || null,
+            duration: computePanelDurationBySpeech(panel.source_text, panel.duration),
           },
           select: {
             id: true,
@@ -292,7 +338,7 @@ export async function persistStoryboardOutputs(params: {
             srtSegment: panel.source_text || null,
             photographyRules: panel.photographyPlan ? JSON.stringify(panel.photographyPlan) : null,
             actingNotes: panel.actingNotes ? JSON.stringify(panel.actingNotes) : null,
-            duration: panel.duration || null,
+            duration: computePanelDurationBySpeech(panel.source_text, panel.duration),
           },
           select: {
             id: true,

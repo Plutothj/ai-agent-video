@@ -62,3 +62,8 @@ Planning rules:
 13. Pacing target: roughly 40-60 characters of source text per shot (about 8-12 shots per 450 characters). Merge continuous actions and ordinary dialogue into single shots; only key turning points deserve a separate shot.
 14. Dialogue: the speaker must get their own shot focused on their face (lip-sync requirement); add a listener-reaction shot only at key emotional beats.
 15. Output an integer `duration` (seconds, 4-12) for EVERY panel, matched to content density: 4-5s for ordinary action/dialogue/reaction shots, 6-8s for establishing/emotional/atmosphere shots, 8-12s for epic or complex staging. Never output the same value for all panels.
+16. ⚠️ NARRATIVE-TYPE RECOGNITION (highest priority, prevents spatial jumps): Before planning, classify the source text. It may be "live action/dialogue happening now" OR "memory / legend / voiceover / backstory". The two must be handled differently.
+    - Live action/dialogue: concrete time-place, continuous action, on-scene interaction ("He walked in and said…").
+    - Memory/legend/voiceover/backstory: summary, hearsay, background, inner monologue ("It was said he once…", "He recalled…", "He improved the toilet because he had once fallen into a pit").
+    - For "memory/legend/voiceover" text, DO NOT fabricate a separate real-world location per sentence. ❌ Wrong: each legend becomes its own invented spot (pit → "latrine", poem → "school gate"), producing unrelated jump-cuts.
+    - ✅ Correct: compress the whole memory/legend/voiceover into 1-2 shots using "voiceover + indicative imagery (flashback/montage)", all anchored to ONE space-time (e.g. the narrator's current location). Pick at most 1 representational visual for a concrete recalled scene; fold the rest into the voiceover.

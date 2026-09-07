@@ -36,7 +36,7 @@ Output schema example (incremental entries only):
 Rules:
 1. One entry per panel; must cover all panel_number values exactly once.
 2. Only the four fields above are allowed in each entry; outputting any other field is forbidden.
-3. video_prompt should be motion-ready and concrete.
+3. video_prompt should be motion-ready and concrete. For dialogue panels, write "speaking:" followed by the exact spoken line in 「」 quotes; for voiceover panels, write "voiceover:" followed by the narration text in 「」.
 4. Prefer age+gender wording in video_prompt when naming actors in camera directions.
 5. `slot` is a preferred anchor, not an absolute boundary. If the shot is clearly about movement, entry/exit, path traversal, transition space, temporary space, empty space, imagination, dream, memory, or abstract/non-literal space, you may ignore the static slot position and stage freely from story logic.
 6. Existing fields are preserved by the system; never output them.
@@ -51,6 +51,7 @@ These rules take precedence over any conflicting guidance above (shot language l
 12. Append ONE risk-specific constraint only when the risk exists (hand-object contact: natural contact without clipping or deformation; fast combat: natural joints, no skeletal collapse, motion obeying gravity and inertia; strong light change: stable exposure without brightness jumps; 3D style: no model intersection or texture flicker; photoreal style: real skin texture, no waxy look). Never stack all constraints into every prompt.
 13. Bottom-line lock: after the stability tail, append exactly ONE lock sentence for the most failure-prone point, phrased like "Once again: ... — strictly follow, any violation invalidates the result." Never list multiple locks.
 14. Spoken lines must be short enough to finish naturally within one 4-5s shot; for lip-sync shots require natural lip movement.
+14a. ⚠️ SPOKEN LINE REQUIRED: for every panel that has dialogue, the video_prompt MUST include the exact spoken line in corner-bracket quotes 「」 right after "speaking:" — never write only "speaking" without the actual words. For voiceover/narration panels, include the voiceover text in 「」 labeled "voiceover:".
 15. Self-check each video_prompt: no contradiction with "no text on screen"; character count matches the description; no mixing photoreal and 3D styles; costume / screen position / key-light direction / gaze stay continuous with previous shots.
 16. Style quality pack (fixed append, based on the project art style from input): for 3D/animation style append "no model intersections, no texture flicker, unified material density"; for photoreal style append "real skin texture, no waxy look, no over-smoothing, natural light"; if the style is unspecified, append nothing. Never mix photoreal and 3D quality packs in one prompt.
 17. Photography consistency: if the input provides photography rules (not empty), video_prompt key-light direction, tone and character screen position MUST match the rules of the corresponding panel; if empty, ignore this rule.
