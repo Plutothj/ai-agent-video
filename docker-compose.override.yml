@@ -5,11 +5,6 @@ services:
       dockerfile: Dockerfile
     image: ai-agent-video:local
     environment:
-      # 本地环境仍使用 MinIO（waoowaoo-minio 容器保留运行）
-      STORAGE_TYPE: "minio"
-      MINIO_ENDPOINT: "http://waoowaoo-minio:9000"
-      MINIO_REGION: "us-east-1"
-      MINIO_BUCKET: "waoowaoo"
-      MINIO_ACCESS_KEY: "minioadmin"
-      MINIO_SECRET_KEY: "minioadmin"
-      MINIO_FORCE_PATH_STYLE: "true"
+      # 存储走火山引擎 TOS（配置在 .env，含 TOS_PUBLIC_BASE_URL 公网域名，
+      # 供腾讯云 AIGC 拉取首帧/参考图）。MinIO 容器（waoowaoo-minio）保留运行，
+      # 仅用于一次性迁移旧数据（scripts/migrate-minio-to-tos.ts），不再作为业务存储。

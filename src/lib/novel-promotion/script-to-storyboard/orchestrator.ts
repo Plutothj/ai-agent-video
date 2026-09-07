@@ -268,8 +268,10 @@ function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-function computeRetryDelayMs(attempt: number) {
-  const base = Math.min(1_000 * Math.pow(2, Math.max(0, attempt - 1)), MAX_RETRY_DELAY_MS)
+function computeRetryDelayMs(attempt: number, isRateLimit = false) {
+  const base = isRateLimit
+    ? Math.min(2_000 * Math.pow(3, Math.max(0, attempt - 1)), 30_000)
+    : Math.min(1_000 * Math.pow(2, Math.max(0, attempt - 1)), MAX_RETRY_DELAY_MS)
   const jitter = Math.floor(Math.random() * 300)
   return base + jitter
 }
@@ -343,7 +345,8 @@ async function runStepWithRetry<T>(
       if (!shouldRetry) {
         break
       }
-      const retryDelayMs = computeRetryDelayMs(attempt)
+      const isRateLimit = normalizedError.code === 'RATE_LIMIT'
+      const retryDelayMs = computeRetryDelayMs(attempt, isRateLimit)
       await wait(retryDelayMs)
     }
   }

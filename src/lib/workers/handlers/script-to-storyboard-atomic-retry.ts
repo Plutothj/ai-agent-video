@@ -136,8 +136,10 @@ function shouldRetryStepError(error: unknown, message: string, retryable: boolea
   return lowerMessage.includes('json') || lowerMessage.includes('parse')
 }
 
-function computeRetryDelayMs(attempt: number) {
-  const base = Math.min(1_000 * Math.pow(2, Math.max(0, attempt - 1)), MAX_RETRY_DELAY_MS)
+function computeRetryDelayMs(attempt: number, isRateLimit = false) {
+  const base = isRateLimit
+    ? Math.min(2_000 * Math.pow(3, Math.max(0, attempt - 1)), 30_000)
+    : Math.min(1_000 * Math.pow(2, Math.max(0, attempt - 1)), MAX_RETRY_DELAY_MS)
   const jitter = Math.floor(Math.random() * 300)
   return base + jitter
 }
@@ -290,7 +292,8 @@ async function runStepWithRetry<T>(params: {
       const shouldRetry = attempt < MAX_STEP_ATTEMPTS
         && shouldRetryStepError(error, normalized.message, normalized.retryable)
       if (!shouldRetry) break
-      const retryDelayMs = computeRetryDelayMs(attempt)
+      const isRateLimit = normalized.code === 'RATE_LIMIT'
+      const retryDelayMs = computeRetryDelayMs(attempt, isRateLimit)
       await wait(retryDelayMs)
     }
   }

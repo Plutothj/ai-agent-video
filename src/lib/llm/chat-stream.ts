@@ -74,6 +74,23 @@ function detectProviderQuotaExhausted(streamErrorChunks: unknown[]): string | nu
   return null
 }
 
+/**
+ * 识别上游"限流"类错误（如腾讯云 TokenHub 的 AI_RetryError / rateLimitExceeded，以及
+ * resource_exhausted / throttle），翻译为明确的可重试 RATE_LIMIT 错误，
+ * 避免把这种可恢复的限流误包装成 LLM_EMPTY_RESPONSE。
+ */
+function detectProviderRateLimitExceeded(streamErrorChunks: unknown[]): string | null {
+  for (const chunk of streamErrorChunks) {
+    const raw = JSON.stringify(chunk)
+    const lower = raw.toLowerCase()
+    if (/\bratelimitexceeded\b|rate_limit_exceeded|ratelimited|resource_exhausted|throttle/.test(lower)) {
+      return 'RATE_LIMIT: 当前 AI 提供商触发限流（rateLimitExceeded）。' +
+        '系统会自动重试；若持续出现，请稍后再试，或减少同时进行的生成任务数量。'
+    }
+  }
+  return null
+}
+
 
 
 export async function chatCompletionStream(
@@ -734,6 +751,10 @@ export async function chatCompletionStream(
           const quotaExhaustedMessage = detectProviderQuotaExhausted(streamErrorChunks)
           if (quotaExhaustedMessage) {
             throw new Error(quotaExhaustedMessage)
+          }
+          const rateLimitMessage = detectProviderRateLimitExceeded(streamErrorChunks)
+          if (rateLimitMessage) {
+            throw new Error(rateLimitMessage)
           }
           const finishInfo = sdkFinishReason ?? streamFinishReason ?? 'unknown'
           const errDetail = streamErrorChunks.length > 0
