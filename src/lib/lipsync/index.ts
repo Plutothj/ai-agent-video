@@ -4,6 +4,7 @@ import { preprocessLipSyncParams, type LipSyncProviderKey } from '@/lib/lipsync/
 import { submitBailianLipSync } from '@/lib/lipsync/providers/bailian'
 import { submitFalLipSync } from '@/lib/lipsync/providers/fal'
 import { submitViduLipSync } from '@/lib/lipsync/providers/vidu'
+import { submitTencentVodLipSync } from '@/lib/lipsync/providers/tencent-vod'
 import type { LipSyncParams, LipSyncResult, LipSyncSubmitContext } from '@/lib/lipsync/types'
 
 function createSubmitContext(
@@ -20,7 +21,7 @@ function createSubmitContext(
 
 function resolveProviderKey(value: string): LipSyncProviderKey {
   const providerKey = value.toLowerCase()
-  if (providerKey === 'fal' || providerKey === 'vidu' || providerKey === 'bailian') {
+  if (providerKey === 'fal' || providerKey === 'vidu' || providerKey === 'bailian' || providerKey === 'tencent-vod') {
     return providerKey
   }
   throw new Error(`LIPSYNC_PROVIDER_UNSUPPORTED: ${value}`)
@@ -54,6 +55,12 @@ export async function generateLipSync(
     if (providerKey === 'bailian') {
       const result = await submitBailianLipSync(preprocessedParams, context)
       _ulogInfo(`[LipSync Async] Bailian 任务已提交: ${result.requestId}`)
+      return result
+    }
+
+    if (providerKey === 'tencent-vod') {
+      const result = await submitTencentVodLipSync(preprocessedParams, context)
+      _ulogInfo(`[LipSync Async] Tencent VOD 任务已提交: ${result.requestId}`)
       return result
     }
 

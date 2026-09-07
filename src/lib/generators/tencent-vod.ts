@@ -204,7 +204,7 @@ function getVideoModelSpec(modelId: string): TencentVideoModelSpec {
     return spec
 }
 
-async function resolveTencentResourceUrl(input: string): Promise<string> {
+export async function resolveTencentResourceUrl(input: string): Promise<string> {
     const value = input.trim()
     if (value.startsWith('http://') || value.startsWith('https://')) {
         return value
@@ -222,7 +222,15 @@ async function resolveTencentResourceUrl(input: string): Promise<string> {
                 ? 'webp'
                 : mime.includes('mp4')
                     ? 'mp4'
-                    : 'png'
+                    : mime.includes('wav')
+                        ? 'wav'
+                        : mime.includes('mpeg') || mime.includes('mp3')
+                            ? 'mp3'
+                            : mime.includes('aac')
+                                ? 'aac'
+                                : mime.includes('mp4') || mime.includes('m4a')
+                                    ? 'm4a'
+                                    : 'png'
         const buffer = Buffer.from(base64, 'base64')
         const key = await uploadObject(buffer, generateUniqueKey('tmp/tencent-vod', ext))
         return requirePublicObjectUrl(key, 'data-url 参考资源')
