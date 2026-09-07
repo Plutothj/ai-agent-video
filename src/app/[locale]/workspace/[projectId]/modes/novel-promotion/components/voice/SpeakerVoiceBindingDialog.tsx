@@ -53,7 +53,14 @@ export default function SpeakerVoiceBindingDialog({
         voiceId: string | null
         voiceType: string
     }) => {
-        if (voice.voiceId) {
+        if (voice.voiceId && voice.voiceType === 'tencent-vod') {
+            onBound(speaker, {
+                provider: 'tencent-vod',
+                voiceType: voice.voiceType,
+                voiceId: voice.voiceId,
+                ...(voice.customVoiceUrl ? { previewAudioUrl: voice.customVoiceUrl } : {}),
+            })
+        } else if (voice.voiceId) {
             onBound(speaker, {
                 provider: 'bailian',
                 voiceType: voice.voiceType,

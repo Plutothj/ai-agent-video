@@ -62,12 +62,19 @@ export const GET = apiHandler(async (
     }
 
     const previewAudioUrl = voice.previewAudioUrl ? signUrlIfNeeded(voice.previewAudioUrl) : undefined
-    speakerVoices[speaker] = {
-      provider: 'bailian',
-      voiceType: voice.voiceType,
-      voiceId: voice.voiceId,
-      ...(previewAudioUrl ? { previewAudioUrl } : {}),
-    }
+    speakerVoices[speaker] = voice.provider === 'tencent-vod'
+      ? {
+        provider: 'tencent-vod',
+        voiceType: voice.voiceType,
+        voiceId: voice.voiceId,
+        ...(previewAudioUrl ? { previewAudioUrl } : {}),
+      }
+      : {
+        provider: 'bailian',
+        voiceType: voice.voiceType,
+        voiceId: voice.voiceId,
+        ...(previewAudioUrl ? { previewAudioUrl } : {}),
+      }
   }
 
   return NextResponse.json({ speakerVoices })
@@ -92,7 +99,7 @@ export const PATCH = apiHandler(async (
   const speaker = readTrimmedString(body?.speaker) ?? ''
   const voiceType = readTrimmedString(body?.voiceType) ?? 'uploaded'
   const providerRaw = readTrimmedString(body?.provider)?.toLowerCase() ?? null
-  if (!providerRaw || (providerRaw !== 'fal' && providerRaw !== 'bailian')) {
+  if (!providerRaw || (providerRaw !== 'fal' && providerRaw !== 'bailian' && providerRaw !== 'tencent-vod')) {
     throw new ApiError('INVALID_PARAMS')
   }
   const provider = providerRaw
@@ -109,7 +116,7 @@ export const PATCH = apiHandler(async (
   if (provider === 'fal' && !audioUrl) {
     throw new ApiError('INVALID_PARAMS')
   }
-  if (provider === 'bailian' && !voiceId) {
+  if ((provider === 'bailian' || provider === 'tencent-vod') && !voiceId) {
     throw new ApiError('INVALID_PARAMS')
   }
 
@@ -150,11 +157,20 @@ export const PATCH = apiHandler(async (
       ? (resolvedPreviewKey || previewCandidate)
       : undefined
 
-    nextVoiceEntry = {
-      provider: 'bailian',
-      voiceType,
-      voiceId: voiceId!,
-      ...(previewAudioUrlToStore ? { previewAudioUrl: previewAudioUrlToStore } : {}),
+    if (provider === 'tencent-vod') {
+      nextVoiceEntry = {
+        provider: 'tencent-vod',
+        voiceType,
+        voiceId: voiceId!,
+        ...(previewAudioUrlToStore ? { previewAudioUrl: previewAudioUrlToStore } : {}),
+      }
+    } else {
+      nextVoiceEntry = {
+        provider: 'bailian',
+        voiceType,
+        voiceId: voiceId!,
+        ...(previewAudioUrlToStore ? { previewAudioUrl: previewAudioUrlToStore } : {}),
+      }
     }
   }
 

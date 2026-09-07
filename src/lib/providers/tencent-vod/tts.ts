@@ -139,7 +139,8 @@ export async function synthesizeWithTencentTTS(
     const response = await callTencentVod({
       action: 'TextToSpeechAsync',
       payload: {
-        SubAppId: credentials.subAppId,
+        // TextToSpeechAsync 要求 SubAppId 为 string（传 number 会被拒 InvalidParameter）
+        SubAppId: String(credentials.subAppId),
         Text: text,
         VoiceId: voiceId,
         LanguageBoost: input.language ?? 'auto',
@@ -170,17 +171,22 @@ export async function synthesizeWithTencentTTS(
       const detail = await callTencentVod({
         action: 'DescribeTaskDetail',
         payload: {
+          // DescribeTaskDetail 的 SubAppId 为 Integer（与 TextToSpeechAsync 提交接口不同，提交接口要 string）
           SubAppId: credentials.subAppId,
           TaskId: taskId,
         },
         credentials,
       }) as TtsTaskOutput
 
-      const status = (typeof detail.Status === 'string' ? detail.Status : '').trim().toUpperCase()
-      const errCode = readErrCode(detail.ErrCode)
+      // TextToSpeechAsync 的结果嵌套在 TextToSpeechAsyncTask 子对象中，
+      // 而 ProcessMedia 等接口的字段在顶层；优先读嵌套，兼容顶层。
+      const ttsTask = (detail as Record<string, unknown>).TextToSpeechAsyncTask as TtsTaskOutput | undefined
+      const effectiveTask = ttsTask ?? detail
+      const status = (typeof effectiveTask.Status === 'string' ? effectiveTask.Status : '').trim().toUpperCase()
+      const errCode = readErrCode(effectiveTask.ErrCode)
 
-      if (status === 'FINISH' && errCode === 0) {
-        const audioUrl = extractAudioUrl(detail)
+      if (status === 'FINISH' && (errCode === 0 || errCode === null)) {
+        const audioUrl = extractAudioUrl(effectiveTask)
         if (!audioUrl) {
           return { success: false, error: 'TENCENT_TTS_COMPLETED_WITHOUT_AUDIO', requestId: taskId }
         }
@@ -198,8 +204,8 @@ export async function synthesizeWithTencentTTS(
         }
       }
 
-      if (status === 'ABORTED' || status === 'FAIL' || (status === 'FINISH' && errCode !== 0)) {
-        const message = detail.Message || `任务失败 (${status}, ErrCode=${String(detail.ErrCode)})`
+      if (status === 'ABORTED' || status === 'FAIL' || (status === 'FINISH' && errCode !== null && errCode !== 0)) {
+        const message = effectiveTask.Message || `任务失败 (${status}, ErrCode=${String(effectiveTask.ErrCode)})`
         _ulogError(`${logPrefix} TaskId=${taskId} 失败: ${message}`)
         return { success: false, error: `TENCENT_TTS_FAILED: ${message}`, requestId: taskId }
       }
